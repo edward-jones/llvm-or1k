@@ -1450,7 +1450,7 @@ Optional Features:
   --enable-targets        Build specific host targets: all or
                           target1,target2,... Valid targets are: host, x86,
                           x86_64, sparc, powerpc, arm, aarch64, mips, hexagon,
-                          xcore, msp430, nvptx, systemz, r600, and cpp
+                          xcore, msp430, nvptx, systemz, r600, or1k and cpp
                           (default=all)
   --enable-experimental-targets
                           Build experimental host targets: disable or
@@ -4157,6 +4157,7 @@ else
   hexagon-*)              llvm_cv_target_arch="Hexagon" ;;
   nvptx-*)                llvm_cv_target_arch="NVPTX" ;;
   s390x-*)                llvm_cv_target_arch="SystemZ" ;;
+  or1k-*)                 llvm_cv_target_arch="OR1K" ;;
   *)                      llvm_cv_target_arch="Unknown" ;;
 esac
 fi
@@ -4192,6 +4193,7 @@ case $host in
   msp430-*)               host_arch="MSP430" ;;
   hexagon-*)              host_arch="Hexagon" ;;
   s390x-*)                host_arch="SystemZ" ;;
+  or1k-*)                 host_arch="OR1K" ;;
   *)                      host_arch="Unknown" ;;
 esac
 
@@ -5092,6 +5094,8 @@ else
  ;;
     SystemZ)     TARGET_HAS_JIT=1
  ;;
+    OR1K)        TARGET_HAS_JIT=0
+ ;;
     *)           TARGET_HAS_JIT=0
  ;;
   esac
@@ -5334,7 +5338,7 @@ _ACEOF
 
 fi
 
-ALL_TARGETS="X86 Sparc PowerPC AArch64 ARM Mips XCore MSP430 CppBackend NVPTX Hexagon SystemZ R600"
+ALL_TARGETS="X86 Sparc PowerPC AArch64 ARM Mips XCore MSP430 CppBackend NVPTX Hexagon SystemZ R600 OR1K"
 ALL_TARGETS=$ALL_TARGETS
 
 
@@ -5370,6 +5374,7 @@ case "$enableval" in
         nvptx)    TARGETS_TO_BUILD="NVPTX $TARGETS_TO_BUILD" ;;
         systemz)  TARGETS_TO_BUILD="SystemZ $TARGETS_TO_BUILD" ;;
         r600)     TARGETS_TO_BUILD="R600 $TARGETS_TO_BUILD" ;;
+        or1k)     TARGETS_TO_BUILD="OR1K $TARGETS_TO_BUILD" ;;
         host) case "$llvm_cv_target_arch" in
             x86)         TARGETS_TO_BUILD="X86 $TARGETS_TO_BUILD" ;;
             x86_64)      TARGETS_TO_BUILD="X86 $TARGETS_TO_BUILD" ;;
@@ -5383,6 +5388,7 @@ case "$enableval" in
             Hexagon)     TARGETS_TO_BUILD="Hexagon $TARGETS_TO_BUILD" ;;
             NVPTX)       TARGETS_TO_BUILD="NVPTX $TARGETS_TO_BUILD" ;;
             SystemZ)     TARGETS_TO_BUILD="SystemZ $TARGETS_TO_BUILD" ;;
+            OR1K)        TARGETS_TO_BUILD="OR1K $TARGETS_TO_BUILD" ;;
             *)       { { echo "$as_me:$LINENO: error: Can not set target to build" >&5
 echo "$as_me: error: Can not set target to build" >&2;}
    { (exit 1); exit 1; }; } ;;
@@ -5394,6 +5400,8 @@ echo "$as_me: error: Unrecognized target $a_target" >&2;}
   done
   ;;
 esac
+
+echo $TARGETS_TO_BUILD
 
 # Check whether --enable-experimental-targets was given.
 if test "${enable_experimental_targets+set}" = set; then

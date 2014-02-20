@@ -24,7 +24,9 @@
 #==============================================================================#
 # Explicit files to ignore (only matches one).
 #==============================================================================#
+.cproject
 .gitusers
+.project
 autom4te.cache
 cscope.files
 cscope.out
@@ -48,3 +50,5 @@ tools/lldb
 tools/lld
 # Sphinx build tree, if building in-source dir.
 docs/_build
+# build directory
+build
