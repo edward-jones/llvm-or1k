@@ -24,8 +24,6 @@
 #include "llvm/MC/MCInst.h"
 #include "llvm/Support/MathExtras.h"
 
-#include "OR1KGenEDInfo.inc"
-
 using namespace llvm;
 
 typedef MCDisassembler::DecodeStatus DecodeStatus;
