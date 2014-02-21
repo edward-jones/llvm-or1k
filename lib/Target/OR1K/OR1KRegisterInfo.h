@@ -24,7 +24,8 @@ namespace llvm {
 class TargetInstrInfo;
 class Type;
 
-struct OR1KRegisterInfo : public OR1KGenRegisterInfo {
+class OR1KRegisterInfo : public OR1KGenRegisterInfo {
+public:
   const TargetInstrInfo &TII;
 
   OR1KRegisterInfo(const TargetInstrInfo &tii);
@@ -36,12 +37,9 @@ struct OR1KRegisterInfo : public OR1KGenRegisterInfo {
 
   bool requiresRegisterScavenging(const MachineFunction &MF) const;
 
-  void eliminateCallFramePseudoInstr(MachineFunction &MF,
-                                     MachineBasicBlock &MBB,
-                                     MachineBasicBlock::iterator I) const;
-
   void eliminateFrameIndex(MachineBasicBlock::iterator II,
-                           int SPAdj, RegScavenger *RS = NULL) const;
+                           int SPAdj, unsigned FIOperandNum,
+                           RegScavenger *RS = NULL) const;
 
   void processFunctionBeforeFrameFinalized(MachineFunction &MF) const;
 

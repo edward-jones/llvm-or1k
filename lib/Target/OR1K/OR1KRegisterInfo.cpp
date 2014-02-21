@@ -14,7 +14,7 @@
 #include "OR1K.h"
 #include "OR1KRegisterInfo.h"
 #include "OR1KSubtarget.h"
-#include "llvm/Function.h"
+#include "llvm/IR/Function.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -22,7 +22,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Type.h"
+#include "llvm/IR/Type.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -62,34 +62,22 @@ OR1KRegisterInfo::requiresRegisterScavenging(const MachineFunction &MF) const {
   return true;
 }
 
-void OR1KRegisterInfo::
-eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
-                              MachineBasicBlock::iterator I) const {
-  // Discard ADJCALLSTACKDOWN, ADJCALLSTACKUP instructions.
-  MBB.erase(I);
-}
-
 void
 OR1KRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
-                                       int SPAdj, RegScavenger *RS) const {
+                                      int SPAdj, unsigned FIOperandNum,
+                                      RegScavenger *RS) const {
   assert(SPAdj == 0 && "Unexpected");
 
-  unsigned i = 0;
   MachineInstr &MI = *II;
   MachineFunction &MF = *MI.getParent()->getParent();
   const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
   bool HasFP = TFI->hasFP(MF);
   DebugLoc dl = MI.getDebugLoc();
 
-  while (!MI.getOperand(i).isFI()) {
-    ++i;
-    assert(i < MI.getNumOperands() && "Instr doesn't have FrameIndex operand!");
-  }
-
-  int FrameIndex = MI.getOperand(i).getIndex();
+  int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
 
   int Offset = MF.getFrameInfo()->getObjectOffset(FrameIndex) +
-               MI.getOperand(i+1).getImm();
+               MI.getOperand(FIOperandNum+1).getImm();
 
   // Addressable stack objects are addressed using neg. offsets from fp
   // or pos. offsets from sp/basepointer
@@ -122,14 +110,14 @@ OR1KRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       .addReg(Reg).addImm(Offset & 0xffffU);
     // Reg = Reg + Sp
     MI.setDesc(TII.get(OR1K::ADD));
-    MI.getOperand(i).ChangeToRegister(Reg, false, false, true);
-    MI.getOperand(i+1).ChangeToRegister(FrameReg, false);
+    MI.getOperand(FIOperandNum).ChangeToRegister(Reg, false, false, true);
+    MI.getOperand(FIOperandNum+1).ChangeToRegister(FrameReg, false);
 
     return;
   }
 
-  MI.getOperand(i).ChangeToRegister(FrameReg, false);
-  MI.getOperand(i+1).ChangeToImmediate(Offset);
+  MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
+  MI.getOperand(FIOperandNum+1).ChangeToImmediate(Offset);
 }
 
 void OR1KRegisterInfo::
@@ -150,7 +138,8 @@ bool OR1KRegisterInfo::needsStackRealignment(const MachineFunction &MF) const {
   const Function *F = MF.getFunction();
   unsigned StackAlign = MF.getTarget().getFrameLowering()->getStackAlignment();
   return ((MFI->getMaxAlignment() > StackAlign) ||
-          F->getFnAttributes().hasStackAlignmentAttr());
+          F->getAttributes().hasAttribute(AttributeSet::FunctionIndex,
+                                     Attribute::StackAlignment));
 }
 
 unsigned OR1KRegisterInfo::getRARegister() const {
