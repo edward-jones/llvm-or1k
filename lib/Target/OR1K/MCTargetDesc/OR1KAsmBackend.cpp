@@ -52,8 +52,8 @@ public:
   MCObjectWriter *createObjectWriter(raw_ostream &OS) const;
 
   // No instruction requires relaxation
-  bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value, 
-                            const MCInstFragment *DF,
+  bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
+                            const MCRelaxableFragment *DF,
                             const MCAsmLayout &Layout) const { return false; }
   
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const;
@@ -160,7 +160,9 @@ const MCFixupKindInfo &OR1KAsmBackend::getFixupKindInfo(MCFixupKind Kind) const{
 
 } // end anonymous namespace
 
-MCAsmBackend *llvm::createOR1KAsmBackend(const Target &T, StringRef TT,
+MCAsmBackend *llvm::createOR1KAsmBackend(const Target &T,
+                                         const MCRegisterInfo &MRI,
+                                         StringRef TT,
                                          StringRef CPU) {
   Triple TheTriple(TT);
 
