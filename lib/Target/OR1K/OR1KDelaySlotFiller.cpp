@@ -119,7 +119,7 @@ bool Filler::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
 
       // Set InsideBundle bit so that the machine verifier doesn't expect this
       // instruction to be a terminator.
-      LastFiller->setIsInsideBundle();
+      LastFiller->bundleWithPred();
     }
   return Changed;
 }
