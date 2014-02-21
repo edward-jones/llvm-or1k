@@ -17,11 +17,11 @@
 #include "OR1KRegisterInfo.h"
 #include "OR1KSubtarget.h"
 #include "OR1KTargetMachine.h"
-#include "llvm/GlobalValue.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/CFG.h"
-#include "llvm/Type.h"
+#include "llvm/IR/Type.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -186,7 +186,6 @@ SelectInlineAsmMemoryOperand(const SDValue &Op, char ConstraintCode,
 /// expanded, promoted and normal instructions
 SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
   unsigned Opcode = Node->getOpcode();
-  DebugLoc dl = Node->getDebugLoc();
 
   // Dump information about the Node being selected
   DEBUG(errs() << "Selecting: "; Node->dump(CurDAG); errs() << "\n");
@@ -212,7 +211,7 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
         unsigned Opc = OR1K::ADDI;
         if (Node->hasOneUse())
           return CurDAG->SelectNodeTo(Node, Opc, VT, TFI, imm);
-        return CurDAG->getMachineNode(Opc, dl, VT, TFI, imm);
+        return CurDAG->getMachineNode(Opc, SDLoc(Node), VT, TFI, imm);
     }
   }
 
