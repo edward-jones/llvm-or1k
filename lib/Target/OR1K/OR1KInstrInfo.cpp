@@ -24,12 +24,12 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
-#define GET_INSTRINFO_CTOR
+#define GET_INSTRINFO_CTOR_DTOR
 #include "OR1KGenInstrInfo.inc"
 
 using namespace llvm;
 
-OR1KInstrInfo::OR1KInstrInfo()
+OR1KInstrInfo::OR1KInstrInfo(TargetMachine &TM)
   : OR1KGenInstrInfo(OR1K::ADJCALLSTACKDOWN, OR1K::ADJCALLSTACKUP),
     RI(*this) {
 }

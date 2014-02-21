@@ -26,7 +26,7 @@ namespace llvm {
 class OR1KInstrInfo : public OR1KGenInstrInfo {
   const OR1KRegisterInfo RI;
 public:
-  OR1KInstrInfo();
+  explicit OR1KInstrInfo(TargetMachine &TM);
 
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should
