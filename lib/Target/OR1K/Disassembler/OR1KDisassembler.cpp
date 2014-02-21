@@ -15,7 +15,6 @@
 #include "OR1KDisassembler.h"
 #include "OR1KSubtarget.h"
 #include "OR1KRegisterInfo.h"
-#include "llvm/MC/EDInstInfo.h"
 #include "llvm/MC/MCDisassembler.h"
 #include "llvm/MC/MCFixedLenDisassembler.h"
 #include "llvm/Support/MemoryObject.h"
@@ -64,7 +63,7 @@ static DecodeStatus readInstruction32(const MemoryObject &region,
   uint8_t Bytes[4];
 
   // We want to read exactly 4 bytes of data.
-  if (region.readBytes(address, 4, (uint8_t*)Bytes, NULL) == -1) {
+  if (region.readBytes(address, 4, (uint8_t*)Bytes) == -1) {
     size = 0;
     return MCDisassembler::Fail;
   }
@@ -102,10 +101,6 @@ OR1KDisassembler::getInstruction(MCInst &instr,
   }
 
   return MCDisassembler::Fail;
-}
-
-const EDInstInfo *OR1KDisassembler::getEDInfo() const {
-  return instInfoOR1K;
 }
 
 DecodeStatus DecodeGPRRegisterClass(MCInst &Inst,

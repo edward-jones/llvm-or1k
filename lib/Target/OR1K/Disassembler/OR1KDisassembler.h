@@ -30,9 +30,6 @@ public:
                       raw_ostream &vStream,
                       raw_ostream &cStream) const;
 
-  /// getEDInfo - See MCDisassembler.
-  const EDInstInfo *getEDInfo() const;
-
   const MCRegisterInfo *getRegInfo() const { return RegInfo; }
 
 private:
