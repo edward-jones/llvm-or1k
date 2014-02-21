@@ -21,18 +21,16 @@ namespace llvm {
   class MachineInstr;
   class MachineModuleInfoMachO;
   class MachineOperand;
-  class Mangler;
 
   /// OR1KMCInstLower - This class is used to lower an MachineInstr
   /// into an MCInst.
 class LLVM_LIBRARY_VISIBILITY OR1KMCInstLower {
   MCContext &Ctx;
-  Mangler &Mang;
 
   AsmPrinter &Printer;
 public:
-  OR1KMCInstLower(MCContext &ctx, Mangler &mang, AsmPrinter &printer)
-    : Ctx(ctx), Mang(mang), Printer(printer) {}
+  OR1KMCInstLower(MCContext &ctx, AsmPrinter &printer)
+    : Ctx(ctx), Printer(printer) {}
   void Lower(const MachineInstr *MI, MCInst &OutMI) const;
 
   MCOperand LowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym) const;
