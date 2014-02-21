@@ -14,7 +14,7 @@
 #include "OR1KFrameLowering.h"
 #include "OR1KInstrInfo.h"
 #include "OR1KMachineFunctionInfo.h"
-#include "llvm/Function.h"
+#include "llvm/IR/Function.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -283,4 +283,11 @@ processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
     MFI->CreateFixedObject(4, Offset, true);
     MRI.setPhysRegUnused(TRI->getBaseRegister());
   }
+}
+
+void OR1KFrameLowering::
+eliminateCallFramePseudoInstr(MachineFunction &MF,
+                              MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator MI) const {
+  MBB.remove(MI);
 }

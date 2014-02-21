@@ -43,6 +43,11 @@ public:
   bool hasFP(const MachineFunction &MF) const;
   virtual void processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
                                                     RegScavenger *RS) const;
+
+  virtual void
+  eliminateCallFramePseudoInstr(MachineFunction &MF,
+                                MachineBasicBlock &MBB,
+                                MachineBasicBlock::iterator MI) const;
 };
 
 } // End llvm namespace
