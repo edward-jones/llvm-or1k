@@ -35,7 +35,9 @@ MCCodeEmitter *createOR1KMCCodeEmitter(const MCInstrInfo &MCII,
                                        const MCSubtargetInfo &STI,
                                        MCContext &Ctx);
 
-MCAsmBackend *createOR1KAsmBackend(const Target &T, StringRef TT,
+MCAsmBackend *createOR1KAsmBackend(const Target &T,
+                                   const MCRegisterInfo &MRI,
+                                   StringRef TT,
                                    StringRef CPU);
 
 
