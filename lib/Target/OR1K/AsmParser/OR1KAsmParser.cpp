@@ -16,6 +16,7 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/ADT/STLExtras.h"
 using namespace llvm;
 
 namespace {
@@ -27,9 +28,10 @@ class OR1KAsmParser : public MCTargetAsmParser {
   MCAsmLexer &getLexer() const { return Parser.getLexer(); }
   MCSubtargetInfo &STI;
 
-  bool MatchAndEmitInstruction(SMLoc IDLoc,
+  bool MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                               MCStreamer &Out);
+                               MCStreamer &Out, unsigned &ErrorInfo,
+                               bool MatchingInlineAsm);
 
   bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc);
 
@@ -37,8 +39,9 @@ class OR1KAsmParser : public MCTargetAsmParser {
 
   OR1KOperand *ParseImmediate();
 
-  bool ParseInstruction(StringRef Name, SMLoc NameLoc,
-                                SmallVectorImpl<MCParsedAsmOperand*> &Operands);
+  bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
+                        SMLoc NameLoc,
+                        SmallVectorImpl<MCParsedAsmOperand*> &Operands);
 
   bool ParseDirective(AsmToken DirectiveID);
 
@@ -49,7 +52,8 @@ class OR1KAsmParser : public MCTargetAsmParser {
 #include "OR1KGenAsmMatcher.inc"
 
 public:
-  OR1KAsmParser(MCSubtargetInfo &sti, MCAsmParser &_Parser)
+  OR1KAsmParser(MCSubtargetInfo &sti, MCAsmParser &_Parser,
+                const MCInstrInfo &MII)
     : MCTargetAsmParser(), Parser(_Parser), STI(sti) {
       setAvailableFeatures(ComputeAvailableFeatures(STI.getFeatureBits()));
   }
@@ -191,20 +195,17 @@ public:
 static unsigned MatchRegisterName(StringRef Name);
 
 bool OR1KAsmParser::
-MatchAndEmitInstruction(SMLoc IDLoc,
+MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                         SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                        MCStreamer &Out) {
+                        MCStreamer &Out, unsigned &ErrorInfo,
+                        bool MatchingInlineAsm) {
   MCInst Inst;
   SMLoc ErrorLoc;
-  unsigned Kind;
-  unsigned ErrorInfo;
-  SmallVector<std::pair< unsigned, std::string >, 4> MapAndConstraints;
 
-  switch (MatchInstructionImpl(Operands, Kind, Inst, MapAndConstraints,
-                               ErrorInfo, /* matchingInlineAsm = */ false)) {
+  switch (MatchInstructionImpl(Operands, Inst, ErrorInfo, MatchingInlineAsm)) {
     default: break;
     case Match_Success:
-      Out.EmitInstruction(Inst);
+      Out.EmitInstruction(Inst, STI);
       return false;
     case Match_MissingFeature:
       return Error(IDLoc, "Instruction use requires option to be enabled");
@@ -257,7 +258,7 @@ OR1KOperand *OR1KAsmParser::ParseImmediate() {
     case AsmToken::Plus:
     case AsmToken::Minus:
     case AsmToken::Integer:
-      if(getParser().ParseExpression(EVal))
+      if(getParser().parseExpression(EVal))
         return 0;
 
       int64_t ans;
@@ -316,7 +317,8 @@ ParseOperand(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
 }
 
 bool OR1KAsmParser::
-ParseInstruction(StringRef Name, SMLoc NameLoc,
+ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
+                 SMLoc NameLoc,
                  SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
   // First operand is token for instruction
   // FIXME: Can we have a more efficient implementation of this?
