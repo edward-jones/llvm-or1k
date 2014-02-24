@@ -494,6 +494,7 @@ OR1KTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   CCInfo.AnalyzeReturn(Outs, RetCC_OR1K32);
 
   SDValue Flag;
+  SmallVector<SDValue, 4> RetOps(1, Chain);
 
   // Copy the result values into the output registers.
   for (unsigned i = 0; i != RVLocs.size(); ++i) {
@@ -506,6 +507,8 @@ OR1KTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     // Guarantee that all emitted copies are stuck together,
     // avoiding something bad.
     Flag = Chain.getValue(1);
+
+    RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
   // The OR1K ABI for returning structs by value requires that we copy
@@ -523,14 +526,17 @@ OR1KTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     Chain = DAG.getCopyToReg(Chain, dl, OR1K::R11, Val, Flag);
     Flag = Chain.getValue(1);
 
+    RetOps.push_back(DAG.getRegister(OR1K::R11, MVT::iPTR));
   }
 
-  unsigned Opc = OR1KISD::RET_FLAG;
+  RetOps[0] = Chain;
+
   if (Flag.getNode())
-    return DAG.getNode(Opc, dl, MVT::Other, Chain, Flag);
+    RetOps.push_back(Flag);
 
   // Return Void
-  return DAG.getNode(Opc, dl, MVT::Other, Chain);
+  return DAG.getNode(OR1KISD::RET_FLAG, dl, MVT::Other,
+                     RetOps.data(), RetOps.size());
 }
 
 /// LowerCCCCallTo - functions arguments are copied from virtual regs to

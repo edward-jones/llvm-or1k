@@ -39,7 +39,7 @@ def call            : SDNode<"OR1KISD::CALL", SDT_OR1KCall,
                              [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                               SDNPVariadic]>;
 def retflag         : SDNode<"OR1KISD::RET_FLAG", SDTNone,
-                             [SDNPHasChain, SDNPOptInGlue]>;
+                             [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 def callseq_start   : SDNode<"ISD::CALLSEQ_START", SDT_OR1KCallSeqStart,
                              [SDNPHasChain, SDNPOutGlue]>;
 def callseq_end     : SDNode<"ISD::CALLSEQ_END",   SDT_OR1KCallSeqEnd,
@@ -537,7 +537,7 @@ let neverHasSideEffects = 1 in
   def NOP : NOP_I<0x1, "l.nop">;
 
 // FIXME: Do not use isCodeGenOnly = 1 to resolve conflicts
-let isReturn = 1, isTerminator = 1, hasDelaySlot=1, isBarrier = 1, isCodeGenOnly = 1, Inst = 0x44004800 in {
+let isReturn = 1, isTerminator = 1, hasDelaySlot=1, isBarrier = 1, Uses=[R9], Inst = 0x44004800 in {
   def RET : InstBR<0x1, (outs), (ins),
                    "l.jr\tr9",
                    [(retflag)]>;
