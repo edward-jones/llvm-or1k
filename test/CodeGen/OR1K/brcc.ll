@@ -14,5 +14,4 @@ while.end:                                        ; preds = %while.body, %entry
 }
 ; CHECK: brcc:
 ; CHECK: l.sfnei r3, 0
-; CHECK: l.bf .L
-; CHECK-NOT: l.j .L
+; CHECK: l.bf
