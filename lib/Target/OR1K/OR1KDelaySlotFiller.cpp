@@ -106,7 +106,8 @@ bool Filler::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
     if (I->getDesc().hasDelaySlot()) {
       MachineBasicBlock::instr_iterator J = I;
 
-      if (!CompatDelaySlotFiller && findDelayInstr(MBB, I, J))
+      if (TM.getOptLevel() != CodeGenOpt::None &&
+              !CompatDelaySlotFiller && findDelayInstr(MBB, I, J))
         MBB.splice(llvm::next(I), &MBB, J);
       else
         BuildMI(MBB, llvm::next(I), DebugLoc(), TII->get(OR1K::NOP)).addImm(0);
