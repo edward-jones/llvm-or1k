@@ -11,8 +11,8 @@
 //  Declarations that describe the OR1K register file
 //===----------------------------------------------------------------------===//
 
-class OR1KReg<string n> : Register<n> {
-  field bits<5> Num;
+class OR1KReg<bits<16> Enc, string n> : Register<n> {
+  let HWEncoding = Enc;
   let Namespace = "OR1K";
 }
 
@@ -23,9 +23,7 @@ def sub_odd  : SubRegIndex<32>;
 
 // Registers are identified with 5-bit ID numbers.
 // Ri - 32-bit integer registers
-class Ri<bits<5> num, string n> : OR1KReg<n> {
-  let Num = num;
-}
+class Ri<bits<16> num, string n> : OR1KReg<num, n>;
 
 // Integer registers
 def R0 : Ri< 0, "r0">, DwarfRegNum<[0]>;
