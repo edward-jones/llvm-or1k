@@ -103,26 +103,38 @@ OR1KDisassembler::getInstruction(MCInst &instr,
   return MCDisassembler::Fail;
 }
 
+static const unsigned OR1kRegs[] = {
+  OR1K::R0, OR1K::R1, OR1K::R2, OR1K::R3,
+  OR1K::R4, OR1K::R5, OR1K::R6, OR1K::R7,
+  OR1K::R8, OR1K::R9, OR1K::R10, OR1K::R11,
+  OR1K::R12, OR1K::R13, OR1K::R14, OR1K::R15,
+  OR1K::R16, OR1K::R17, OR1K::R18, OR1K::R19,
+  OR1K::R20, OR1K::R21, OR1K::R22, OR1K::R23,
+  OR1K::R24, OR1K::R25, OR1K::R26, OR1K::R27,
+  OR1K::R28, OR1K::R29, OR1K::R30, OR1K::R31
+};
+
+template <std::size_t N>
+static DecodeStatus decodeRegisterClass(MCInst &Inst, uint64_t RegNo,
+                                        const unsigned (&Regs)[N]) {
+  assert(RegNo < N && "Invalid register number");
+  Inst.addOperand(MCOperand::CreateReg(Regs[RegNo]));
+  return MCDisassembler::Success;
+}
+
 DecodeStatus DecodeGPRRegisterClass(MCInst &Inst,
                                     unsigned RegNo,
                                     uint64_t Address,
                                     const void *Decoder) {
-
-  if (RegNo > 31)
-    return MCDisassembler::Fail;
-
-  // The internal representation of the registers counts r0: 1, r1: 2, etc.
-  // FIXME: Use a more stable method of identifying registers
-  Inst.addOperand(MCOperand::CreateReg(RegNo+1));
-  return MCDisassembler::Success;
+  return decodeRegisterClass(Inst, RegNo, OR1kRegs);
 }
 
 static DecodeStatus DecodeMemoryValue(MCInst &Inst,
                                        unsigned Insn,
                                        uint64_t Address,
                                        const void *Decoder) {
-  unsigned Register = (Insn >> 16) & 0b11111;
-  Inst.addOperand(MCOperand::CreateReg(Register+1));
+  unsigned RegNo = (Insn >> 16) & 0b11111;
+  decodeRegisterClass(Inst, RegNo, OR1kRegs);
   unsigned Offset = (Insn & 0xffff);
   Inst.addOperand(MCOperand::CreateImm(SignExtend32<16>(Offset)));
   return MCDisassembler::Success;
