@@ -24,6 +24,7 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/MC/MCContext.h"
 using namespace llvm;
 
 STATISTIC(MCNumEmitted, "Number of MC instructions emitted");
@@ -106,7 +107,7 @@ getMachineOpValue(const MCInst &MI, const MCOperand &MO,
                   SmallVectorImpl<MCFixup> &Fixups,
                   const MCSubtargetInfo &STI) const {
   if (MO.isReg())
-    return getOR1KRegisterNumbering(MO.getReg());
+    return Ctx.getRegisterInfo()->getEncodingValue(MO.getReg());
   if (MO.isImm())
     return static_cast<unsigned>(MO.getImm());
   
@@ -186,7 +187,7 @@ getMemoryOpValue(const MCInst &MI, unsigned Op,
   unsigned encoding;
   const MCOperand op1 = MI.getOperand(1);
   assert(op1.isReg() && "First operand is not register.");
-  encoding = (getOR1KRegisterNumbering(op1.getReg()) << 16);
+  encoding = (Ctx.getRegisterInfo()->getEncodingValue(op1.getReg()) << 16);
   MCOperand op2 = MI.getOperand(2);
   assert(op2.isImm() && "Second operand is not immediate.");
   encoding |= (static_cast<short>(op2.getImm()) & 0xffff);
