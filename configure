@@ -5401,8 +5401,6 @@ echo "$as_me: error: Unrecognized target $a_target" >&2;}
   ;;
 esac
 
-echo $TARGETS_TO_BUILD
-
 # Check whether --enable-experimental-targets was given.
 if test "${enable_experimental_targets+set}" = set; then
   enableval=$enable_experimental_targets;
