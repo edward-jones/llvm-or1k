@@ -51,12 +51,6 @@ void MCExpr::print(raw_ostream &OS) const {
       return;
     }
 
-    if (SRE.getKind() == MCSymbolRefExpr::VK_PPC_DARWIN_HA16 ||
-        SRE.getKind() == MCSymbolRefExpr::VK_PPC_DARWIN_LO16) {
-      OS << MCSymbolRefExpr::getVariantKindName(SRE.getKind());
-      UseParens = true;
-    }
-
     if (UseParens)
       OS << '(' << Sym << ')';
     else
