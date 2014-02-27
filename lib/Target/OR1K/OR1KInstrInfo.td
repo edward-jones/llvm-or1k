@@ -244,12 +244,15 @@ class ALU_RIz<bits<4> subOp, string asmstr, SDNode OpNode>
            [(set GPR:$rD, (OpNode GPR:$rA, immZExt16:$imm16))]>;
 
 let isAsCheapAsAMove = 1 in {
-  def ADDI  : ALU_RIs<0x7, "l.addi", add>;
-  def ADDIC : ALU_RIs<0x8, "l.addic", add>;
+  let Defs = [SR] in def ADDI: ALU_RIs<0x7, "l.addi", add>;
+  let Uses = [SR], Defs = [SR] in def ADDIC: ALU_RIs<0x8, "l.addic", adde>;
   def ANDI  : ALU_RIz<0x9, "l.andi", and>;
   def ORI   : ALU_RIz<0xa, "l.ori", or>;
   def XORI  : ALU_RIs<0xb, "l.xori", xor>;
 }
+
+def : Pat<(addc GPR:$rA, immSExt16:$imm16),
+          (ADDI GPR:$rA, immSExt16:$imm16)>;
 
 let Predicates=[HasMul] in
   def MULI  : ALU_RIs<0xc, "l.muli", mul>;
@@ -280,8 +283,8 @@ class ALU1_RR<bits<4> subOp, string asmstr, SDNode OpNode>
 
 let isAsCheapAsAMove = 1 in {
   let isCommutable=1 in {
-    def ADD  : ALU1_RR<0x0, "l.add", add>;
-    def ADDC : ALU1_RR<0x1, "l.addc", add>;
+    let Defs = [SR] in def ADD  : ALU1_RR<0x0, "l.add", add>;
+    let Uses = [SR], Defs = [SR] in def ADDC : ALU1_RR<0x1, "l.addc", adde>;
   }
   def SUB  : ALU1_RR<0x2, "l.sub", sub>;
   let isCommutable=1 in {
@@ -290,6 +293,9 @@ let isAsCheapAsAMove = 1 in {
     def XOR  : ALU1_RR<0x5, "l.xor", xor>;
  }
 }
+
+def : Pat<(addc GPR:$rA, GPR:$rB),
+          (ADD GPR:$rA, GPR:$rB)>;
 
 let Uses = [SR], Predicates = [HasCmov] in
   def CMOV : ALU1_RR<0xe, "l.cmov", OR1Kselectcc>;
