@@ -638,6 +638,24 @@ def MEM_SYNC : FixedOp<0x22000000, "l.msync", []>;
 def PIPE_SYNC : FixedOp<0x22800000, "l.psync", []>;
 
 //===----------------------------------------------------------------------===//
+// OS interaction instructions
+//===----------------------------------------------------------------------===//
+
+class InstOS<bits<16> op, string asmstring, list<dag> pattern>
+  : InstOR1K<(outs), (ins i16imm:$imm),
+	  !strconcat(asmstring, "\t$imm"), pattern> {
+  bits<16> imm;
+
+  let Inst{31-16} = op;
+  let Inst{15-0} = imm;
+}
+
+def SYS : InstOS<0x2000, "l.sys", []>;
+def TRAP : InstOS<0x2100, "l.trap", []>;
+
+def RFE : FixedOp<0x90000000, "l.rfe", []>;
+
+//===----------------------------------------------------------------------===//
 // Non-Instruction Patterns
 //===----------------------------------------------------------------------===//
 
