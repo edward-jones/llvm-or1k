@@ -434,7 +434,7 @@ class LOADi32<bits<4> subop, string asmstring, PatFrag opNode>
 
 //def LD : LOAD<0x0, "l.ld">;
 def LWZ : LOADi32<0x1, "l.lwz", load>;
-//def LWS : LOAD<0x2, "l.lws", load>;
+def LWS : LOAD<0x2, "l.lws", []>;
 def LBZ : LOADi32<0x3, "l.lbz", zextloadi8>;
 def LBS : LOADi32<0x4, "l.lbs", sextloadi8>;
 def LHZ : LOADi32<0x5, "l.lhz", zextloadi16>;
