@@ -122,8 +122,6 @@ OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm) :
   setOperationAction(ISD::CTPOP,             MVT::i32, Expand);
 
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,   Expand);
-  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8,   Expand);
-  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16,  Expand);
 
   // Extended load operations for i1 types must be promoted
   setLoadExtAction(ISD::EXTLOAD,             MVT::i1,   Promote);

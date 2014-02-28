@@ -586,6 +586,44 @@ let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
                       [(set GPR:$rD, i32hi16:$imm)]>;
 }
 
+// ------------------------------------------------------------------------===//
+// EXTEND with sign/zero instructions
+// ------------------------------------------------------------------------===//
+
+class EXTEND<bits<4> op2Val, bits<4> op3Val, string asmstring, list<dag> pattern>
+  : InstRR<0x8, (outs GPR:$rD), (ins GPR:$rA),
+          !strconcat(asmstring, "\t$rD, $rA"), pattern> {
+  bits<5> rD;
+  bits<5> rA;
+  bits<4> op2;
+  bits<4> op3;
+
+  let Inst{25-21} = rD;
+  let Inst{20-16} = rA;
+
+  let Inst{9-6} = op2;
+  let Inst{3-0} = op3;
+
+  let op2 = op2Val;
+  let op3 = op3Val;
+}
+
+def EXT_BYTE_SIGN :
+	  EXTEND<0x1, 0xc, "l.extbs", [(set GPR:$rD, (sext_inreg GPR:$rA, i8))]>;
+def EXT_HALF_SIGN :
+	  EXTEND<0x0, 0xc, "l.exths", [(set GPR:$rD, (sext_inreg GPR:$rA, i16))]>;
+def EXT_WORD_SIGN : EXTEND<0x0, 0xd, "l.extws", []>;
+
+def EXT_BYTE_ZERO : EXTEND<0x3, 0xc, "l.extbz", []>;
+def EXT_HALF_ZERO : EXTEND<0x2, 0xc, "l.exthz", []>;
+def EXT_WORD_ZERO : EXTEND<0x1, 0xd, "l.extwz", []>;
+
+def : Pat<(and GPR:$rA, 255),
+          (EXT_BYTE_ZERO GPR:$rA)>;
+
+def : Pat<(and GPR:$rA, 65535),
+          (EXT_HALF_ZERO GPR:$rA)>;
+
 //===----------------------------------------------------------------------===//
 // Non-Instruction Patterns
 //===----------------------------------------------------------------------===//
