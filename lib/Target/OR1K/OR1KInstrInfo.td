@@ -510,23 +510,6 @@ let isCall=1, hasDelaySlot=1,
   def JALR : BRANCHL_R<0x2, "l.jalr">;
 }
 
-/*
-
-def MTSPR :
-
-def MFSPR :
-
-
-def NOP :
-
-
-def SYS :
-def TRAP :
-
-def RFE :
-
-*/
-
 class NOP_I<bits<2> op2Val, string asmstr>
   : InstBI<0x5, (outs), (ins i16imm:$imm),
            !strconcat(asmstr, "\t$imm"), []> {
