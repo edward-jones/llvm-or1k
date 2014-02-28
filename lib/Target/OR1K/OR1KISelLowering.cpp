@@ -108,7 +108,7 @@ OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm) :
   if (!Subtarget.hasRor()) {
     setOperationAction(ISD::ROTR,            MVT::i32, Expand);
   }
-  // FIXME: use l.ror (rotate right) to do rotate left
+
   setOperationAction(ISD::ROTL,              MVT::i32, Expand);
   setOperationAction(ISD::SHL_PARTS,         MVT::i32, Expand);
   setOperationAction(ISD::SRL_PARTS,         MVT::i32, Expand);
