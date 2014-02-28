@@ -625,6 +625,19 @@ def : Pat<(and GPR:$rA, 65535),
           (EXT_HALF_ZERO GPR:$rA)>;
 
 //===----------------------------------------------------------------------===//
+// Synchronization instructions
+//===----------------------------------------------------------------------===//
+
+class FixedOp<bits<32> op, string asmstr, list<dag> pattern>
+  : InstOR1K<(outs), (ins), asmstr, pattern> {
+  let Inst{31-0} = op;
+}
+
+def CONTX_SYNC : FixedOp<0x23000000, "l.csync", []>;
+def MEM_SYNC : FixedOp<0x22000000, "l.msync", []>;
+def PIPE_SYNC : FixedOp<0x22800000, "l.psync", []>;
+
+//===----------------------------------------------------------------------===//
 // Non-Instruction Patterns
 //===----------------------------------------------------------------------===//
 

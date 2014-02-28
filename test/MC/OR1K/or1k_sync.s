@@ -1,0 +1,10 @@
+# RUN: llvm-mc -arch=or1k --show-encoding %s | FileCheck %s
+
+    l.csync
+# CHECK: # encoding: [0x23,0x00,0x00,0x00]
+
+    l.msync
+# CHECK: # encoding: [0x22,0x00,0x00,0x00]
+
+    l.psync
+# CHECK: # encoding: [0x22,0x80,0x00,0x00]
