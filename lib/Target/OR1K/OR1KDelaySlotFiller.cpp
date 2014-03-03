@@ -39,10 +39,10 @@ static cl::opt<bool> CompatDelaySlotFiller(
   cl::Hidden);
 
 namespace {
-  struct Filler : public MachineFunctionPass {
+  class Filler : public MachineFunctionPass {
+  public:
     /// Target machine description which we query for reg. names, data
     /// layout, etc.
-    ///
     TargetMachine &TM;
     const TargetInstrInfo *TII;
     MachineBasicBlock::instr_iterator LastFiller;
@@ -86,7 +86,6 @@ namespace {
 
 /// createOR1KDelaySlotFillerPass - Returns a pass that fills in delay
 /// slots in OR1K MachineFunctions
-///
 FunctionPass *llvm::createOR1KDelaySlotFillerPass(OR1KTargetMachine &tm) {
   return new Filler(tm);
 }
