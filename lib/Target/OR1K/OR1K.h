@@ -17,6 +17,7 @@
 #include "MCTargetDesc/OR1KBaseInfo.h"
 #include "MCTargetDesc/OR1KMCTargetDesc.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Analysis/LoopPass.h"
 
 namespace llvm {
 class FunctionPass;
@@ -35,6 +36,10 @@ FunctionPass *createOR1KDelaySlotFillerPass(OR1KTargetMachine &TM);
 /// createOR1KGlobalBaseRegPass - This pass initializes a global base
 /// register for PIC on OR1K.
 FunctionPass* createOR1KGlobalBaseRegPass();
+
+/// createOR1KMACSubPass - This pass tries to substiture multiply and accumulate
+/// operations with the dedicated hardware instructions.
+LoopPass* createOR1KMACSubPass(OR1KTargetMachine &TM);
 
 extern Target TheOR1KTarget;
 } // end namespace llvm;
