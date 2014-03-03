@@ -656,6 +656,52 @@ def TRAP : InstOS<0x2100, "l.trap", []>;
 def RFE : FixedOp<0x90000000, "l.rfe", []>;
 
 //===----------------------------------------------------------------------===//
+// MAC instructions
+//===----------------------------------------------------------------------===//
+
+class MAC_RR<bits<4> subOp1, string asmstr, list<dag> pattern>
+  : InstRR<0x1, (outs), (ins GPR:$rA, GPR:$rB),
+           !strconcat(asmstr, "\t$rA, $rB"), pattern> {
+  bits<5> rA;
+  bits<5> rB;
+
+  let Inst{20-16} = rA;
+  let Inst{15-11} = rB;
+
+  let Inst{3-0} = subOp1;
+}
+
+def MAC : MAC_RR<0x1, "l.mac", []>;
+def MSB : MAC_RR<0x2, "l.msb", []>;
+
+def MACU : MAC_RR<0x3, "l.macu", []>;
+def MSBU : MAC_RR<0x4, "l.msbu", []>;
+
+class MAC_RI<bits<4> subOp1, string asmstr, list<dag> pattern>
+  : InstBR<0x3, (outs), (ins GPR:$rA, s16imm:$imm),
+           !strconcat(asmstr, "\t$rA, $imm"), pattern> {
+  bits<5> rA;
+  bits<16> imm;
+
+  let Inst{20-16} = rA;
+  let Inst{15-0} = imm;
+}
+
+def MACI : MAC_RI<0x1, "l.maci", []>;
+
+class MAC_R<string asmstr, list<dag> pattern>
+  : InstBI<0x6, (outs GPR:$rD), (ins),  !strconcat(asmstr, "\t$rD"), pattern> {
+  bits<5> rD;
+
+  let Inst{16} = 1;
+  let Inst{15-0} = 0x0;
+  let Inst{25-21} = rD;
+}
+
+def MACRC : MAC_R<"l.macrc", []>;
+
+
+//===----------------------------------------------------------------------===//
 // Non-Instruction Patterns
 //===----------------------------------------------------------------------===//
 
