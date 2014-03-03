@@ -80,5 +80,6 @@ bool OR1KPassConfig::addInstSelector() {
 bool OR1KPassConfig::addPreEmitPass() {
   addPass(createOR1KDelaySlotFillerPass(getOR1KTargetMachine()));
   //addPass(createOR1KMACSubPass(getOR1KTargetMachine()));
+  addPass(createOR1KFunnyNOPReplacer(getOR1KTargetMachine()));
   return true;
 }
