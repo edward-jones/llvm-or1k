@@ -399,7 +399,7 @@ class STORE<bits<4> subOp, string asmstring, list<dag> pattern>
           !strconcat(asmstring, "\t$dst, $rB"), pattern> {
   bits<21> dst;
   bits<5> rB;
-  
+
   let Inst{25-21} = dst{15-11};
   let Inst{20-16} = dst{20-16};
   let Inst{15-11} = rB;
@@ -567,7 +567,7 @@ let Uses = [SR], usesCustomInserter = 1, Predicates = [NoCmov] in {
 
 // PIC base construction.
 let neverHasSideEffects = 1, isNotDuplicable = 1, Defs = [R9] in
-  def GETPC : Pseudo<(outs), (ins i32imm:$label), 
+  def GETPC : Pseudo<(outs), (ins i32imm:$label),
   "#GETPC $label", []>;
 
 class MOVHI_I <dag outs, dag ins, list<dag> pattern>
