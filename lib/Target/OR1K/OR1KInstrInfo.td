@@ -257,7 +257,7 @@ def : Pat<(addc GPR:$rA, immSExt16:$imm16),
 let Predicates=[HasMul] in
   def MULI  : ALU_RIs<0xc, "l.muli", mul>;
 
-class ALU_RR<bits<4> subOp, string asmstr, list<dag> pattern>
+class ALU_RR<bits<2> op2Val, bits<4> op3Val, string asmstr, list<dag> pattern>
   : InstRR<0x8, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
            !strconcat(asmstr, "\t$rD, $rA, $rB"), pattern> {
   bits<5> rD;
@@ -273,24 +273,24 @@ class ALU_RR<bits<4> subOp, string asmstr, list<dag> pattern>
   let Inst{9-8} = op2;
   let Inst{3-0} = op3;
 
-  let op2 = 0;
-  let op3 = subOp;
+  let op2 = op2Val;
+  let op3 = op3Val;
 }
 
-class ALU1_RR<bits<4> subOp, string asmstr, SDNode OpNode>
-  : ALU_RR<subOp, asmstr,
+class ALU_STD_RR<bits<4> subOp, string asmstr, SDNode OpNode>
+  : ALU_RR<0x0, subOp, asmstr,
            [(set GPR:$rD, (OpNode (i32 GPR:$rA), (i32 GPR:$rB)))]>;
 
 let isAsCheapAsAMove = 1 in {
   let isCommutable=1 in {
-    let Defs = [SR] in def ADD  : ALU1_RR<0x0, "l.add", add>;
-    let Uses = [SR], Defs = [SR] in def ADDC : ALU1_RR<0x1, "l.addc", adde>;
+    let Defs = [SR] in def ADD  : ALU_STD_RR<0x0, "l.add", add>;
+    let Uses = [SR], Defs = [SR] in def ADDC : ALU_STD_RR<0x1, "l.addc", adde>;
   }
-  def SUB  : ALU1_RR<0x2, "l.sub", sub>;
+  def SUB  : ALU_STD_RR<0x2, "l.sub", sub>;
   let isCommutable=1 in {
-    def AND  : ALU1_RR<0x3, "l.and", and>;
-    def OR   : ALU1_RR<0x4, "l.or", or>;
-    def XOR  : ALU1_RR<0x5, "l.xor", xor>;
+    def AND  : ALU_STD_RR<0x3, "l.and", and>;
+    def OR   : ALU_STD_RR<0x4, "l.or", or>;
+    def XOR  : ALU_STD_RR<0x5, "l.xor", xor>;
  }
 }
 
@@ -298,15 +298,19 @@ def : Pat<(addc GPR:$rA, GPR:$rB),
           (ADD GPR:$rA, GPR:$rB)>;
 
 let Uses = [SR], Predicates = [HasCmov] in
-  def CMOV : ALU1_RR<0xe, "l.cmov", OR1Kselectcc>;
+  def CMOV : ALU_STD_RR<0xe, "l.cmov", OR1Kselectcc>;
+
+class ALU_OPT_RR<bits<4> subOp, string asmstr, SDNode OpNode>
+  : ALU_RR<0x3, subOp, asmstr,
+           [(set GPR:$rD, (OpNode (i32 GPR:$rA), (i32 GPR:$rB)))]>;
 
 let isCommutable=1, Predicates=[HasMul] in {
-  def MUL  : ALU1_RR<0x6, "l.mul", mul>;
-  def MULU : ALU1_RR<0xb, "l.mulu", mul>;
+  def MUL  : ALU_OPT_RR<0x6, "l.mul", mul>;
+  def MULU : ALU_OPT_RR<0xb, "l.mulu", mul>;
 }
 let Predicates=[HasDiv] in {
-  def DIV  : ALU1_RR<0x9, "l.div", sdiv>;
-  def DIVU : ALU1_RR<0xa, "l.divu", udiv>;
+  def DIV  : ALU_OPT_RR<0x9, "l.div", sdiv>;
+  def DIVU : ALU_OPT_RR<0xa, "l.divu", udiv>;
 }
 
 class ALU2_RR<bits<2> subOp1, bits<4> subOp2, string asmstr, SDNode OpNode>

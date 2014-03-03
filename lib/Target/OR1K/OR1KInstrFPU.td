@@ -110,7 +110,7 @@ let Defs = [SR], hasSideEffects = 1 in {
 
 // FIXME: Do not use isCodeGenOnly = 1 to resolve conflicts
 let Uses = [SR], Predicates = [HasCmov], isCodeGenOnly = 1 in
-  def CMOVf32 : ALU_RR<0xe, "l.cmov",
+  def CMOVf32 : ALU_RR<0x0, 0xe, "l.cmov",
            [(set GPR:$rD, (OR1Kselectcc (f32 GPR:$rA),(f32 GPR:$rB)))]>;
 
 //===----------------------------------------------------------------------===//
