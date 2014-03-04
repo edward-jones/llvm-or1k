@@ -1,0 +1,7 @@
+# RUN: llvm-mc -arch=or1k -disassemble %s | FileCheck %s
+
+	0xb4 0x80 0x00 0x2a
+# CHECK: l.mfspr r4, r0, 42
+
+	0xc0 0x80 0x20 0x03
+# CHECK: l.mtspr r0, r4, 8195
