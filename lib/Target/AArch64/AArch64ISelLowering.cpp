@@ -26,6 +26,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/IR/CallingConv.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace llvm;
 
@@ -628,8 +629,7 @@ AArch64TargetLowering::emitAtomicBinary(MachineInstr *MI, MachineBasicBlock *BB,
 
   // Transfer the remainder of BB and its successor edges to exitMBB.
   exitMBB->splice(exitMBB->begin(), BB,
-                  llvm::next(MachineBasicBlock::iterator(MI)),
-                  BB->end());
+                  std::next(MachineBasicBlock::iterator(MI)), BB->end());
   exitMBB->transferSuccessorsAndUpdatePHIs(BB);
 
   const TargetRegisterClass *TRC
@@ -723,8 +723,7 @@ AArch64TargetLowering::emitAtomicBinaryMinMax(MachineInstr *MI,
 
   // Transfer the remainder of BB and its successor edges to exitMBB.
   exitMBB->splice(exitMBB->begin(), BB,
-                  llvm::next(MachineBasicBlock::iterator(MI)),
-                  BB->end());
+                  std::next(MachineBasicBlock::iterator(MI)), BB->end());
   exitMBB->transferSuccessorsAndUpdatePHIs(BB);
 
   unsigned scratch = MRI.createVirtualRegister(TRC);
@@ -807,8 +806,7 @@ AArch64TargetLowering::emitAtomicCmpSwap(MachineInstr *MI,
 
   // Transfer the remainder of BB and its successor edges to exitMBB.
   exitMBB->splice(exitMBB->begin(), BB,
-                  llvm::next(MachineBasicBlock::iterator(MI)),
-                  BB->end());
+                  std::next(MachineBasicBlock::iterator(MI)), BB->end());
   exitMBB->transferSuccessorsAndUpdatePHIs(BB);
 
   //  thisMBB:
@@ -899,8 +897,7 @@ AArch64TargetLowering::EmitF128CSEL(MachineInstr *MI,
   MF->insert(It, EndBB);
 
   // Transfer rest of current basic-block to EndBB
-  EndBB->splice(EndBB->begin(), MBB,
-                llvm::next(MachineBasicBlock::iterator(MI)),
+  EndBB->splice(EndBB->begin(), MBB, std::next(MachineBasicBlock::iterator(MI)),
                 MBB->end());
   EndBB->transferSuccessorsAndUpdatePHIs(MBB);
 
@@ -1282,7 +1279,8 @@ AArch64TargetLowering::SaveVarArgRegisters(CCState &CCInfo, SelectionDAG &DAG,
     FuncInfo->setVariadicFPRSize(FPRSaveSize);
   }
 
-  int StackIdx = MFI->CreateFixedObject(8, CCInfo.getNextStackOffset(), true);
+  unsigned StackOffset = RoundUpToAlignment(CCInfo.getNextStackOffset(), 8);
+  int StackIdx = MFI->CreateFixedObject(8, StackOffset, true);
 
   FuncInfo->setVariadicStackIdx(StackIdx);
   FuncInfo->setVariadicGPRIdx(GPRIdx);

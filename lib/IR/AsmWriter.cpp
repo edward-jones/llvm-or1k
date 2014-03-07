@@ -19,10 +19,11 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/DebugInfo.h"
 #include "llvm/IR/AssemblyAnnotationWriter.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/InlineAsm.h"
@@ -32,7 +33,6 @@
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/TypeFinder.h"
 #include "llvm/IR/ValueSymbolTable.h"
-#include "llvm/Support/CFG.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Dwarf.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -1252,8 +1252,9 @@ void AssemblyWriter::printModule(const Module *M) {
       M->getModuleIdentifier().find('\n') == std::string::npos)
     Out << "; ModuleID = '" << M->getModuleIdentifier() << "'\n";
 
-  if (!M->getDataLayout().empty())
-    Out << "target datalayout = \"" << M->getDataLayout() << "\"\n";
+  const std::string &DL = M->getDataLayoutStr();
+  if (!DL.empty())
+    Out << "target datalayout = \"" << DL << "\"\n";
   if (!M->getTargetTriple().empty())
     Out << "target triple = \"" << M->getTargetTriple() << "\"\n";
 

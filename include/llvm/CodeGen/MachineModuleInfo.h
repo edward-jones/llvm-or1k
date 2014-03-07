@@ -35,14 +35,14 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MachineLocation.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/DataTypes.h"
-#include "llvm/Support/DebugLoc.h"
 #include "llvm/Support/Dwarf.h"
-#include "llvm/Support/ValueHandle.h"
 
 namespace llvm {
 
@@ -238,8 +238,10 @@ public:
     return FrameInstructions;
   }
 
-  void addFrameInst(const MCCFIInstruction &Inst) {
+  unsigned LLVM_ATTRIBUTE_UNUSED_RESULT
+  addFrameInst(const MCCFIInstruction &Inst) {
     FrameInstructions.push_back(Inst);
+    return FrameInstructions.size() - 1;
   }
 
   /// getCompactUnwindEncoding - Returns the compact unwind encoding for a

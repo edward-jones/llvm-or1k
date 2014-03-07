@@ -48,7 +48,7 @@ namespace {
     Loop             *L;
     LoopInfo         *LI;
     ScalarEvolution  *SE;
-    const DataLayout *TD; // May be NULL
+    const DataLayout *DL; // May be NULL
 
     SmallVectorImpl<WeakVH> &DeadInsts;
 
@@ -60,9 +60,10 @@ namespace {
       L(Loop),
       LI(LPM->getAnalysisIfAvailable<LoopInfo>()),
       SE(SE),
-      TD(LPM->getAnalysisIfAvailable<DataLayout>()),
       DeadInsts(Dead),
       Changed(false) {
+      DataLayoutPass *DLP = LPM->getAnalysisIfAvailable<DataLayoutPass>();
+      DL = DLP ? &DLP->getDataLayout() : 0;
       assert(LI && "IV simplification requires LoopInfo");
     }
 
@@ -299,7 +300,7 @@ Instruction *SimplifyIndvar::splitOverflowIntrinsic(Instruction *IVUser,
     return IVUser;
 
   BasicBlock *ContinueBB = Branch->getSuccessor(1);
-  if (llvm::next(pred_begin(ContinueBB)) != pred_end(ContinueBB))
+  if (std::next(pred_begin(ContinueBB)) != pred_end(ContinueBB))
     return IVUser;
 
   // Check if all users of the add are provably NSW.

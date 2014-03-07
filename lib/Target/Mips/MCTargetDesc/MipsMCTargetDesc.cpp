@@ -11,9 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MipsMCTargetDesc.h"
 #include "InstPrinter/MipsInstPrinter.h"
 #include "MipsMCAsmInfo.h"
+#include "MipsMCNaCl.h"
+#include "MipsMCTargetDesc.h"
 #include "MipsTargetStreamer.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/MC/MCCodeGenInfo.h"
@@ -39,6 +40,20 @@
 
 using namespace llvm;
 
+/// Select the Mips CPU for the given triple and cpu name.
+/// FIXME: Merge with the copy in MipsSubtarget.cpp
+static inline StringRef selectMipsCPU(StringRef TT, StringRef CPU) {
+  if (CPU.empty() || CPU == "generic") {
+    Triple TheTriple(TT);
+    if (TheTriple.getArch() == Triple::mips ||
+        TheTriple.getArch() == Triple::mipsel)
+      CPU = "mips32";
+    else
+      CPU = "mips64";
+  }
+  return CPU;
+}
+
 static MCInstrInfo *createMipsMCInstrInfo() {
   MCInstrInfo *X = new MCInstrInfo();
   InitMipsMCInstrInfo(X);
@@ -53,15 +68,7 @@ static MCRegisterInfo *createMipsMCRegisterInfo(StringRef TT) {
 
 static MCSubtargetInfo *createMipsMCSubtargetInfo(StringRef TT, StringRef CPU,
                                                   StringRef FS) {
-  if (CPU.empty()) {
-    Triple TheTriple(TT);
-    // FIXME: CodeGen picks mips32 in both cases.
-    if (TheTriple.getArch() == Triple::mips ||
-        TheTriple.getArch() == Triple::mipsel)
-      CPU = "mips32";
-    else
-      CPU = "mips64";
-  }
+  CPU = selectMipsCPU(TT, CPU);
   MCSubtargetInfo *X = new MCSubtargetInfo();
   InitMipsMCSubtargetInfo(X, TT, CPU, FS);
   return X;
@@ -103,8 +110,12 @@ static MCStreamer *createMCStreamer(const Target &T, StringRef TT,
                                     raw_ostream &OS, MCCodeEmitter *Emitter,
                                     const MCSubtargetInfo &STI,
                                     bool RelaxAll, bool NoExecStack) {
-  MCStreamer *S =
-      createELFStreamer(Context, MAB, OS, Emitter, RelaxAll, NoExecStack);
+  MCStreamer *S;
+  if (!Triple(TT).isOSNaCl())
+    S = createELFStreamer(Context, MAB, OS, Emitter, RelaxAll, NoExecStack);
+  else
+    S = createMipsNaClELFStreamer(Context, MAB, OS, Emitter, RelaxAll,
+                                  NoExecStack);
   new MipsTargetELFStreamer(*S, STI);
   return S;
 }

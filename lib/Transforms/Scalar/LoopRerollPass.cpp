@@ -125,9 +125,9 @@ namespace {
       initializeLoopRerollPass(*PassRegistry::getPassRegistry());
     }
 
-    bool runOnLoop(Loop *L, LPPassManager &LPM);
+    bool runOnLoop(Loop *L, LPPassManager &LPM) override;
 
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.addRequired<AliasAnalysis>();
       AU.addRequired<LoopInfo>();
       AU.addPreserved<LoopInfo>();
@@ -141,7 +141,7 @@ protected:
     AliasAnalysis *AA;
     LoopInfo *LI;
     ScalarEvolution *SE;
-    DataLayout *DL;
+    const DataLayout *DL;
     TargetLibraryInfo *TLI;
     DominatorTree *DT;
 
@@ -190,12 +190,12 @@ protected:
 
       iterator begin() {
         assert(Valid && "Using invalid reduction");
-        return llvm::next(Instructions.begin());
+        return std::next(Instructions.begin());
       }
 
       const_iterator begin() const {
         assert(Valid && "Using invalid reduction");
-        return llvm::next(Instructions.begin());
+        return std::next(Instructions.begin());
       }
 
       iterator end() { return Instructions.end(); }
@@ -561,7 +561,7 @@ bool LoopReroll::findScaleFromMul(Instruction *RealIV, uint64_t &Scale,
     return false;
   const SCEVAddRecExpr *RealIVSCEV = cast<SCEVAddRecExpr>(SE->getSCEV(RealIV));
   Instruction *User1 = cast<Instruction>(*RealIV->use_begin()),
-              *User2 = cast<Instruction>(*llvm::next(RealIV->use_begin()));
+              *User2 = cast<Instruction>(*std::next(RealIV->use_begin()));
   if (!SE->isSCEVable(User1->getType()) || !SE->isSCEVable(User2->getType()))
     return false;
   const SCEVAddRecExpr *User1SCEV =
@@ -1141,7 +1141,8 @@ bool LoopReroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   LI = &getAnalysis<LoopInfo>();
   SE = &getAnalysis<ScalarEvolution>();
   TLI = &getAnalysis<TargetLibraryInfo>();
-  DL = getAnalysisIfAvailable<DataLayout>();
+  DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
+  DL = DLP ? &DLP->getDataLayout() : 0;
   DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
 
   BasicBlock *Header = L->getHeader();

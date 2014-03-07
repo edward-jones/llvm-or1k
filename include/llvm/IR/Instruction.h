@@ -17,8 +17,8 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ilist_node.h"
+#include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/User.h"
-#include "llvm/Support/DebugLoc.h"
 
 namespace llvm {
 
@@ -52,6 +52,8 @@ public:
 
   inline const BasicBlock *getParent() const { return Parent; }
   inline       BasicBlock *getParent()       { return Parent; }
+
+  const DataLayout *getDataLayout() const;
 
   /// removeFromParent - This method unlinks 'this' from the containing basic
   /// block, but does not delete it.

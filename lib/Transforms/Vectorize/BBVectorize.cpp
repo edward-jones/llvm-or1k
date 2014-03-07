@@ -41,10 +41,10 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Type.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/ValueHandle.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include <algorithm>
@@ -201,7 +201,8 @@ namespace {
       AA = &P->getAnalysis<AliasAnalysis>();
       DT = &P->getAnalysis<DominatorTreeWrapperPass>().getDomTree();
       SE = &P->getAnalysis<ScalarEvolution>();
-      TD = P->getAnalysisIfAvailable<DataLayout>();
+      DataLayoutPass *DLP = P->getAnalysisIfAvailable<DataLayoutPass>();
+      DL = DLP ? &DLP->getDataLayout() : 0;
       TTI = IgnoreTargetInfo ? 0 : &P->getAnalysis<TargetTransformInfo>();
     }
 
@@ -214,7 +215,7 @@ namespace {
     AliasAnalysis *AA;
     DominatorTree *DT;
     ScalarEvolution *SE;
-    DataLayout *TD;
+    const DataLayout *DL;
     const TargetTransformInfo *TTI;
 
     // FIXME: const correct?
@@ -430,19 +431,20 @@ namespace {
       return changed;
     }
 
-    virtual bool runOnBasicBlock(BasicBlock &BB) {
+    bool runOnBasicBlock(BasicBlock &BB) override {
       // OptimizeNone check deferred to vectorizeBB().
 
       AA = &getAnalysis<AliasAnalysis>();
       DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
       SE = &getAnalysis<ScalarEvolution>();
-      TD = getAnalysisIfAvailable<DataLayout>();
+      DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
+      DL = DLP ? &DLP->getDataLayout() : 0;
       TTI = IgnoreTargetInfo ? 0 : &getAnalysis<TargetTransformInfo>();
 
       return vectorizeBB(BB);
     }
 
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
       BasicBlockPass::getAnalysisUsage(AU);
       AU.addRequired<AliasAnalysis>();
       AU.addRequired<DominatorTreeWrapperPass>();
@@ -634,11 +636,11 @@ namespace {
         int64_t Offset = IntOff->getSExtValue();
 
         Type *VTy = IPtr->getType()->getPointerElementType();
-        int64_t VTyTSS = (int64_t) TD->getTypeStoreSize(VTy);
+        int64_t VTyTSS = (int64_t) DL->getTypeStoreSize(VTy);
 
         Type *VTy2 = JPtr->getType()->getPointerElementType();
         if (VTy != VTy2 && Offset < 0) {
-          int64_t VTy2TSS = (int64_t) TD->getTypeStoreSize(VTy2);
+          int64_t VTy2TSS = (int64_t) DL->getTypeStoreSize(VTy2);
           OffsetInElmts = Offset/VTy2TSS;
           return (abs64(Offset) % VTy2TSS) == 0;
         }
@@ -821,7 +823,7 @@ namespace {
 
     // It is important to cleanup here so that future iterations of this
     // function have less work to do.
-    (void) SimplifyInstructionsInBlock(&BB, TD, AA->getTargetLibraryInfo());
+    (void) SimplifyInstructionsInBlock(&BB, DL, AA->getTargetLibraryInfo());
     return true;
   }
 
@@ -876,7 +878,7 @@ namespace {
     }
 
     // We can't vectorize memory operations without target data
-    if (TD == 0 && IsSimpleLoadStore)
+    if (DL == 0 && IsSimpleLoadStore)
       return false;
 
     Type *T1, *T2;
@@ -913,7 +915,7 @@ namespace {
     if (T2->isX86_FP80Ty() || T2->isPPC_FP128Ty() || T2->isX86_MMXTy())
       return false;
 
-    if ((!Config.VectorizePointers || TD == 0) &&
+    if ((!Config.VectorizePointers || DL == 0) &&
         (T1->getScalarType()->isPointerTy() ||
          T2->getScalarType()->isPointerTy()))
       return false;
@@ -977,7 +979,7 @@ namespace {
           // with the lower offset has an alignment suitable for the
           // vector type.
 
-          unsigned VecAlignment = TD->getPrefTypeAlignment(VType);
+          unsigned VecAlignment = DL->getPrefTypeAlignment(VType);
           if (BottomAlignment < VecAlignment)
             return false;
         }
@@ -1229,7 +1231,7 @@ namespace {
       if (I->mayWriteToMemory()) WriteSet.add(I);
 
       bool JAfterStart = IAfterStart;
-      BasicBlock::iterator J = llvm::next(I);
+      BasicBlock::iterator J = std::next(I);
       for (unsigned ss = 0; J != E && ss <= Config.SearchLimit; ++J, ++ss) {
         if (J == Start) JAfterStart = true;
 
@@ -1274,7 +1276,7 @@ namespace {
         // The next call to this function must start after the last instruction
         // selected during this invocation.
         if (JAfterStart) {
-          Start = llvm::next(J);
+          Start = std::next(J);
           IAfterStart = JAfterStart = false;
         }
 
@@ -1451,7 +1453,7 @@ namespace {
       AliasSetTracker WriteSet(*AA);
       if (I->mayWriteToMemory()) WriteSet.add(I);
 
-      for (BasicBlock::iterator J = llvm::next(I); J != E; ++J) {
+      for (BasicBlock::iterator J = std::next(I); J != E; ++J) {
         (void) trackUsesOfI(Users, WriteSet, I, J);
 
         if (J == EL)
@@ -2839,7 +2841,7 @@ namespace {
                      DenseSet<ValuePair> &LoadMoveSetPairs,
                      Instruction *I, Instruction *J) {
     // Skip to the first instruction past I.
-    BasicBlock::iterator L = llvm::next(BasicBlock::iterator(I));
+    BasicBlock::iterator L = std::next(BasicBlock::iterator(I));
 
     DenseSet<Value *> Users;
     AliasSetTracker WriteSet(*AA);
@@ -2861,7 +2863,7 @@ namespace {
                      Instruction *&InsertionPt,
                      Instruction *I, Instruction *J) {
     // Skip to the first instruction past I.
-    BasicBlock::iterator L = llvm::next(BasicBlock::iterator(I));
+    BasicBlock::iterator L = std::next(BasicBlock::iterator(I));
 
     DenseSet<Value *> Users;
     AliasSetTracker WriteSet(*AA);
@@ -2892,7 +2894,7 @@ namespace {
                      DenseSet<ValuePair> &LoadMoveSetPairs,
                      Instruction *I) {
     // Skip to the first instruction past I.
-    BasicBlock::iterator L = llvm::next(BasicBlock::iterator(I));
+    BasicBlock::iterator L = std::next(BasicBlock::iterator(I));
 
     DenseSet<Value *> Users;
     AliasSetTracker WriteSet(*AA);
@@ -3163,7 +3165,7 @@ namespace {
       }
 
       // Before removing I, set the iterator to the next instruction.
-      PI = llvm::next(BasicBlock::iterator(I));
+      PI = std::next(BasicBlock::iterator(I));
       if (cast<Instruction>(PI) == J)
         ++PI;
 

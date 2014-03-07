@@ -26,13 +26,13 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/ConstantFolding.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/InstVisitor.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/InstVisitor.h"
 #include "llvm/Pass.h"
-#include "llvm/Support/CallSite.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -153,7 +153,7 @@ namespace {
 /// Constant Propagation.
 ///
 class SCCPSolver : public InstVisitor<SCCPSolver> {
-  const DataLayout *TD;
+  const DataLayout *DL;
   const TargetLibraryInfo *TLI;
   SmallPtrSet<BasicBlock*, 8> BBExecutable; // The BBs that are executable.
   DenseMap<Value*, LatticeVal> ValueState;  // The state each value is in.
@@ -205,8 +205,8 @@ class SCCPSolver : public InstVisitor<SCCPSolver> {
   typedef std::pair<BasicBlock*, BasicBlock*> Edge;
   DenseSet<Edge> KnownFeasibleEdges;
 public:
-  SCCPSolver(const DataLayout *td, const TargetLibraryInfo *tli)
-    : TD(td), TLI(tli) {}
+  SCCPSolver(const DataLayout *DL, const TargetLibraryInfo *tli)
+    : DL(DL), TLI(tli) {}
 
   /// MarkBlockExecutable - This method can be used by clients to mark all of
   /// the blocks that are known to be intrinsically live in the processed unit.
@@ -1067,7 +1067,7 @@ void SCCPSolver::visitLoadInst(LoadInst &I) {
   }
 
   // Transform load from a constant into a constant if possible.
-  if (Constant *C = ConstantFoldLoadFromConstPtr(Ptr, TD))
+  if (Constant *C = ConstantFoldLoadFromConstPtr(Ptr, DL))
     return markConstant(IV, &I, C);
 
   // Otherwise we cannot say for certain what value this load will produce.
@@ -1499,7 +1499,7 @@ namespace {
   /// Sparse Conditional Constant Propagator.
   ///
   struct SCCP : public FunctionPass {
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.addRequired<TargetLibraryInfo>();
     }
     static char ID; // Pass identification, replacement for typeid
@@ -1510,7 +1510,7 @@ namespace {
     // runOnFunction - Run the Sparse Conditional Constant Propagation
     // algorithm, and return true if the function was modified.
     //
-    bool runOnFunction(Function &F);
+    bool runOnFunction(Function &F) override;
   };
 } // end anonymous namespace
 
@@ -1557,9 +1557,10 @@ bool SCCP::runOnFunction(Function &F) {
     return false;
 
   DEBUG(dbgs() << "SCCP on function '" << F.getName() << "'\n");
-  const DataLayout *TD = getAnalysisIfAvailable<DataLayout>();
+  const DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
+  const DataLayout *DL = DLP ? &DLP->getDataLayout() : 0;
   const TargetLibraryInfo *TLI = &getAnalysis<TargetLibraryInfo>();
-  SCCPSolver Solver(TD, TLI);
+  SCCPSolver Solver(DL, TLI);
 
   // Mark the first block of the function as being executable.
   Solver.MarkBlockExecutable(F.begin());
@@ -1631,14 +1632,14 @@ namespace {
   /// Constant Propagation.
   ///
   struct IPSCCP : public ModulePass {
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.addRequired<TargetLibraryInfo>();
     }
     static char ID;
     IPSCCP() : ModulePass(ID) {
       initializeIPSCCPPass(*PassRegistry::getPassRegistry());
     }
-    bool runOnModule(Module &M);
+    bool runOnModule(Module &M) override;
   };
 } // end anonymous namespace
 
@@ -1686,9 +1687,10 @@ static bool AddressIsTaken(const GlobalValue *GV) {
 }
 
 bool IPSCCP::runOnModule(Module &M) {
-  const DataLayout *TD = getAnalysisIfAvailable<DataLayout>();
+  DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
+  const DataLayout *DL = DLP ? &DLP->getDataLayout() : 0;
   const TargetLibraryInfo *TLI = &getAnalysis<TargetLibraryInfo>();
-  SCCPSolver Solver(TD, TLI);
+  SCCPSolver Solver(DL, TLI);
 
   // AddressTakenFunctions - This set keeps track of the address-taken functions
   // that are in the input.  As IPSCCP runs through and simplifies code,

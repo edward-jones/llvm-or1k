@@ -17,12 +17,12 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/GVMaterializer.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/GVMaterializer.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/Support/LeakDetector.h"
+#include "llvm/IR/LeakDetector.h"
 #include <algorithm>
 #include <cstdarg>
 #include <cstdlib>
@@ -42,8 +42,8 @@ template class llvm::SymbolTableListTraits<GlobalAlias, Module>;
 // Primitive Module methods.
 //
 
-Module::Module(StringRef MID, LLVMContext& C)
-  : Context(C), Materializer(NULL), ModuleID(MID) {
+Module::Module(StringRef MID, LLVMContext &C)
+    : Context(C), Materializer(), ModuleID(MID), DL("") {
   ValSymTab = new ValueSymbolTable();
   NamedMDSymTab = new StringMap<NamedMDNode *>();
   Context.addModule(this);
@@ -336,6 +336,34 @@ void Module::addModuleFlag(MDNode *Node) {
          isa<MDString>(Node->getOperand(1)) &&
          "Invalid operand types for module flag!");
   getOrInsertModuleFlagsMetadata()->addOperand(Node);
+}
+
+void Module::setDataLayout(StringRef Desc) {
+  DL.reset(Desc);
+
+  if (Desc.empty()) {
+    DataLayoutStr = "";
+  } else {
+    DataLayoutStr = DL.getStringRepresentation();
+    // DataLayoutStr is now equivalent to Desc, but since the representation
+    // is not unique, they may not be identical.
+  }
+}
+
+void Module::setDataLayout(const DataLayout *Other) {
+  if (!Other) {
+    DataLayoutStr = "";
+    DL.reset("");
+  } else {
+    DL = *Other;
+    DataLayoutStr = DL.getStringRepresentation();
+  }
+}
+
+const DataLayout *Module::getDataLayout() const {
+  if (DataLayoutStr.empty())
+    return 0;
+  return &DL;
 }
 
 //===----------------------------------------------------------------------===//
