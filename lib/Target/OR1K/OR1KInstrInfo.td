@@ -163,6 +163,8 @@ def HasCmov      : Predicate<"Subtarget.hasCmov()">,
                    AssemblerPredicate<"FeatureCmov">;
 def NoCmov       : Predicate<"!Subtarget.hasCmov()">,
                    AssemblerPredicate<"!FeatureCmov">;
+def HasMAC       : Predicate<"Subtarget.hasMAC()">,
+                   AssemblerPredicate<"FeatureMAC">;
 
 
 // -------------------------------------------------- //
@@ -663,6 +665,7 @@ def RFE : FixedOp<0x90000000, "l.rfe", []>;
 // MAC instructions
 //===----------------------------------------------------------------------===//
 
+let Predicates=[HasMAC] in {
 class MAC_RR<bits<4> subOp1, string asmstr, list<dag> pattern>
   : InstRR<0x1, (outs), (ins GPR:$rA, GPR:$rB),
            !strconcat(asmstr, "\t$rA, $rB"), pattern> {
@@ -703,6 +706,7 @@ class MAC_R<string asmstr, list<dag> pattern>
 }
 
 def MACRC : MAC_R<"l.macrc", []>;
+}
 
 //===----------------------------------------------------------------------===//
 // MOVE from/to special register

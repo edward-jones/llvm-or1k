@@ -41,6 +41,8 @@ def FeatureRor   : SubtargetFeature<"ror", "HasRor", "true",
                                    "Enable hardware rotate right">;
 def FeatureCmov  : SubtargetFeature<"cmov", "HasCmov", "true",
                                     "Enable conditional move instruction">;
+def FeatureMAC   : SubtargetFeature<"mac", "HasMAC", "true",
+                                    "Enable MAC instructions">;
 
 //===----------------------------------------------------------------------===//
 // OR1K processors supported.

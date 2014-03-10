@@ -1,4 +1,4 @@
-# RUN: llvm-mc -arch=or1k -show-encoding %s | FileCheck %s
+# RUN: llvm-mc -arch=or1k -mattr=mac -show-encoding %s | FileCheck %s
 
 	l.macrc r3
   # CHECK: # encoding: [0x18,0x61,0x00,0x00]

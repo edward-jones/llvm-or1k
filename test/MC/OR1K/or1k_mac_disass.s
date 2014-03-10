@@ -1,4 +1,4 @@
-# RUN: llvm-mc -arch=or1k -disassemble %s | FileCheck %s
+# RUN: llvm-mc -arch=or1k -mattr=mac -disassemble %s | FileCheck %s
 
 	0x18 0x61 0x00 0x00
 # CHECK: l.macrc r3
