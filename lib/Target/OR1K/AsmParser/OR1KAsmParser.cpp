@@ -20,7 +20,7 @@
 using namespace llvm;
 
 namespace {
-struct OR1KOperand;
+class OR1KOperand;
 
 class OR1KAsmParser : public MCTargetAsmParser {
   MCAsmParser &Parser;
@@ -62,8 +62,8 @@ public:
 
 /// OR1KOperand - Instances of this class represented a parsed machine
 /// instruction
-struct OR1KOperand : public MCParsedAsmOperand {
-
+class OR1KOperand : public MCParsedAsmOperand {
+public:
   enum KindTy {
     Token,
     Register,
@@ -89,7 +89,7 @@ struct OR1KOperand : public MCParsedAsmOperand {
       unsigned BaseReg;
       const MCExpr *Off;
     } Mem;
-  };
+  } Op;
 
   OR1KOperand(KindTy K) : MCParsedAsmOperand(), Kind(K) {}
 public:
@@ -99,16 +99,16 @@ public:
     EndLoc = o.EndLoc;
     switch (Kind) {
       case Register:
-        Reg = o.Reg;
+        Op.Reg = o.Op.Reg;
         break;
       case Immediate:
-        Imm = o.Imm;
+        Op.Imm = o.Op.Imm;
         break;
       case Token:
-        Tok = o.Tok;
+        Op.Tok = o.Op.Tok;
         break;
       case Memory:
-        Mem = o.Mem;
+        Op.Mem = o.Op.Mem;
         break;
     }
   }
@@ -121,17 +121,17 @@ public:
 
   unsigned getReg() const {
     assert(Kind == Register && "Invalid type access!");
-    return Reg.RegNum;
+    return Op.Reg.RegNum;
   }
 
   const MCExpr *getImm() const {
     assert (Kind == Immediate && "Invalid type access!");
-    return Imm.Val;
+    return Op.Imm.Val;
   }
 
   StringRef getToken() const {
     assert (Kind == Token && "Invalid type access!");
-    return StringRef(Tok.Data, Tok.Length);
+    return StringRef(Op.Tok.Data, Op.Tok.Length);
   }
 
   // Functions for testing operand type
@@ -166,8 +166,8 @@ public:
 
   static OR1KOperand *CreateToken(StringRef Str, SMLoc S) {
     OR1KOperand *Op = new OR1KOperand(Token);
-    Op->Tok.Data = Str.data();
-    Op->Tok.Length = Str.size();
+    Op->Op.Tok.Data = Str.data();
+    Op->Op.Tok.Length = Str.size();
     Op->StartLoc = S;
     Op->EndLoc = S;
     return Op;
@@ -175,7 +175,7 @@ public:
 
   static OR1KOperand *CreateReg(unsigned RegNo, SMLoc S, SMLoc E) {
     OR1KOperand *Op = new OR1KOperand(Register);
-    Op->Reg.RegNum = RegNo;
+    Op->Op.Reg.RegNum = RegNo;
     Op->StartLoc = S;
     Op->EndLoc = E;
     return Op;
@@ -183,7 +183,7 @@ public:
   
   static OR1KOperand *CreateImm(const MCExpr *Val, SMLoc S, SMLoc E) {
     OR1KOperand *Op = new OR1KOperand(Immediate);
-    Op->Imm.Val = Val;
+    Op->Op.Imm.Val = Val;
     Op->StartLoc = S;
     Op->EndLoc = E;
     return Op;

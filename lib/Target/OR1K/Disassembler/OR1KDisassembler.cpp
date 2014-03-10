@@ -133,7 +133,7 @@ static DecodeStatus DecodeMemoryValue(MCInst &Inst,
                                        unsigned Insn,
                                        uint64_t Address,
                                        const void *Decoder) {
-  unsigned RegNo = (Insn >> 16) & 0b11111;
+  unsigned RegNo = (Insn >> 16) & 0x1F;
   decodeRegisterClass(Inst, RegNo, OR1kRegs);
   unsigned Offset = (Insn & 0xffff);
   Inst.addOperand(MCOperand::CreateImm(SignExtend32<16>(Offset)));

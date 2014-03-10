@@ -169,8 +169,6 @@ void OR1KMCCodeEmitter::
 EncodeInstruction(const MCInst &Inst, raw_ostream &OS,
                   SmallVectorImpl<MCFixup> &Fixups,
                   const MCSubtargetInfo &STI) const {
-  unsigned Opcode = Inst.getOpcode();
-  const MCInstrDesc &Desc = MCII.get(Opcode);
   // Keep track of the current byte being emitted
   unsigned CurByte = 0;
 
