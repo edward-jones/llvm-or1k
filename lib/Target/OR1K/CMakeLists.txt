@@ -25,6 +25,7 @@ add_llvm_target(OR1KCodeGen
   OR1KSelectionDAGInfo.cpp
   OR1KAsmPrinter.cpp
   OR1KMCInstLower.cpp
+  OR1KFunnyNopReplacer.cpp
   )
 
 add_subdirectory(InstPrinter)
