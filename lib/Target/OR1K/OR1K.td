@@ -25,6 +25,7 @@ include "llvm/Target/Target.td"
 //===----------------------------------------------------------------------===//
 
 include "OR1KRegisterInfo.td"
+include "OR1KSchedule.td"
 include "OR1KCallingConv.td"
 include "OR1KInstrInfo.td"
 
