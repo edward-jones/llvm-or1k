@@ -48,6 +48,8 @@ def FeatureExt   : SubtargetFeature<"ext", "HasExt", "true",
                                     "Enable sign/zero extend instructions">;
 def FeatureSFII  : SubtargetFeature<"sfii", "HasSFII", "true",
                                     "Enable set flag if instructions with immediate">;
+def FeatureFBit  : SubtargetFeature<"fbit", "HasFBit", "true",
+                                    "Enable find first/last bit set instructions">;
 
 //===----------------------------------------------------------------------===//
 // OR1K processors supported.

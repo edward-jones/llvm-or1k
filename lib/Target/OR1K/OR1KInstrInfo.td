@@ -169,6 +169,8 @@ def HasExt       : Predicate<"Subtarget.hasExt()">,
                    AssemblerPredicate<"FeatureExt">;
 def HasSFII      : Predicate<"Subtarget.hasSFII()">,
                    AssemblerPredicate<"FeatureSFII">;
+def HasFBit      : Predicate<"Subtarget.hasFBit()">,
+                   AssemblerPredicate<"FeatureFBit">;
 
 
 // -------------------------------------------------- //
@@ -345,8 +347,10 @@ class ALU2_RR<bits<2> subOp1, bits<4> subOp2, string asmstr, SDNode OpNode>
   let op3 = subOp2;
 }
 
+let Predicates=[HasFBit] in {
 def FF1 : ALU2_RR<0x0, 0xf, "l.ff1", OR1Kff1>;
 def FL1 : ALU2_RR<0x1, 0xf, "l.fl1", OR1Kfl1>;
+}
 
 // -------------------------------------------------- //
 // SHIFT instructions
