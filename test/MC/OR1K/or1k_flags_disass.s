@@ -1,4 +1,4 @@
-# RUN: llvm-mc -arch=or1k -disassemble %s | FileCheck %s
+# RUN: llvm-mc -arch=or1k -mattr=sfii -disassemble %s | FileCheck %s
 
     0xe4 0x01 0x10 0x00
 # CHECK: l.sfeq r1, r2

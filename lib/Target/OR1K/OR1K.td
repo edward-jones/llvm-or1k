@@ -46,6 +46,8 @@ def FeatureMAC   : SubtargetFeature<"mac", "HasMAC", "true",
                                     "Enable MAC instructions">;
 def FeatureExt   : SubtargetFeature<"ext", "HasExt", "true",
                                     "Enable sign/zero extend instructions">;
+def FeatureSFII  : SubtargetFeature<"sfii", "HasSFII", "true",
+                                    "Enable set flag if instructions with immediate">;
 
 //===----------------------------------------------------------------------===//
 // OR1K processors supported.

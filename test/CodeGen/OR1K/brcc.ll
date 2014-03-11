@@ -1,4 +1,4 @@
-; RUN: llc -march=or1k < %s | FileCheck %s
+; RUN: llc -march=or1k -mattr=sfii < %s | FileCheck %s
 
 define void @brcc(i32 %a) nounwind {
 entry:

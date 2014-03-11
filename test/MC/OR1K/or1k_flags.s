@@ -1,4 +1,4 @@
-# RUN: llvm-mc -arch=or1k -show-encoding %s | FileCheck %s
+# RUN: llvm-mc -arch=or1k -mattr=sfii -show-encoding %s | FileCheck %s
 
     l.sfeq r1, r2
 # CHECK: # encoding: [0xe4,0x01,0x10,0x00]

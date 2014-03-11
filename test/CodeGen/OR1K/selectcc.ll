@@ -1,4 +1,4 @@
-; RUN: llc -march=or1k < %s | FileCheck %s
+; RUN: llc -march=or1k -mattr=sfii < %s | FileCheck %s
 
 define i32 @eqrr(i32 %a, i32 %b) {
 entry:

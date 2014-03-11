@@ -167,6 +167,8 @@ def HasMAC       : Predicate<"Subtarget.hasMAC()">,
                    AssemblerPredicate<"FeatureMAC">;
 def HasExt       : Predicate<"Subtarget.hasExt()">,
                    AssemblerPredicate<"FeatureExt">;
+def HasSFII      : Predicate<"Subtarget.hasSFII()">,
+                   AssemblerPredicate<"FeatureSFII">;
 
 
 // -------------------------------------------------- //
@@ -207,7 +209,7 @@ class SF_RI<bits<5> op2Val, string asmstr, PatLeaf Cond>
 
 multiclass SF<bits<5> op2Val, string asmstr, PatLeaf Cond> {
   def _rr : SF_RR<op2Val, asmstr, Cond>;
-  def _ri : SF_RI<op2Val, asmstr, Cond>;
+  let Predicates=[HasSFII] in def _ri : SF_RI<op2Val, asmstr, Cond>;
 }
 
 // l.sfxx instructions
