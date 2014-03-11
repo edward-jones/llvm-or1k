@@ -1,4 +1,4 @@
-; RUN: llc -march=or1k < %s | FileCheck %s
+; RUN: llc -march=or1k -mattr=ext < %s | FileCheck %s
 
 define i32 @u8tou32(i8 %val) {
   %1 = zext i8 %val to i32

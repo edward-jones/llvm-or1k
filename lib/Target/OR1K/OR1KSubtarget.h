@@ -31,6 +31,7 @@ class OR1KSubtarget : public OR1KGenSubtargetInfo {
   bool HasRor;
   bool HasCmov;
   bool HasMAC;
+  bool HasExt;
 public:
   /// This constructor initializes the data members to match that
   /// of the specified triple.
@@ -47,6 +48,7 @@ public:
   bool hasRor()    const { return HasRor; }
   bool hasCmov()   const { return HasCmov; }
   bool hasMAC()    const { return HasMAC; }
+  bool hasExt()    const { return HasExt; }
 };
 } // End llvm namespace
 

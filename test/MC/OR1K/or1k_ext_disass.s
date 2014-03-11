@@ -1,4 +1,4 @@
-# RUN: llvm-mc -arch=or1k -disassemble %s | FileCheck %s
+# RUN: llvm-mc -arch=or1k -mattr=ext -disassemble %s | FileCheck %s
 
 	0xe0 0x64 0x00 0x4c
 # CHECK: l.extbs r3, r4

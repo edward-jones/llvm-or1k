@@ -1,4 +1,4 @@
-# RUN: llvm-mc -arch=or1k -show-encoding %s | FileCheck %s
+# RUN: llvm-mc -arch=or1k -mattr=ext -show-encoding %s | FileCheck %s
 
 	l.extbs r3, r4
   # CHECK: # encoding: [0xe0,0x64,0x00,0x4c]

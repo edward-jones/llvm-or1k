@@ -1,4 +1,4 @@
-; RUN: llc -march=or1k < %s | FileCheck %s
+; RUN: llc -march=or1k -mattr=ext < %s | FileCheck %s
 
 define i32 @zextloadi8(i8* %a.addr) {
   %1 = load i8* %a.addr

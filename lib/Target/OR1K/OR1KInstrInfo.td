@@ -165,6 +165,8 @@ def NoCmov       : Predicate<"!Subtarget.hasCmov()">,
                    AssemblerPredicate<"!FeatureCmov">;
 def HasMAC       : Predicate<"Subtarget.hasMAC()">,
                    AssemblerPredicate<"FeatureMAC">;
+def HasExt       : Predicate<"Subtarget.hasExt()">,
+                   AssemblerPredicate<"FeatureExt">;
 
 
 // -------------------------------------------------- //
@@ -626,6 +628,7 @@ class EXTEND<bits<4> op2Val, bits<4> op3Val, string asmstring, list<dag> pattern
   let op3 = op3Val;
 }
 
+let Predicates=[HasExt] in {
 def EXT_BYTE_SIGN :
 	  EXTEND<0x1, 0xc, "l.extbs", [(set GPR:$rD, (sext_inreg GPR:$rA, i8))]>;
 def EXT_HALF_SIGN :
@@ -641,6 +644,7 @@ def : Pat<(and GPR:$rA, 255),
 
 def : Pat<(and GPR:$rA, 65535),
           (EXT_HALF_ZERO GPR:$rA)>;
+}
 
 //===----------------------------------------------------------------------===//
 // Synchronization instructions
