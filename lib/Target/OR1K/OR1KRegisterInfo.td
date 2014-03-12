@@ -62,6 +62,8 @@ def R31 : Ri<31, "r31">, DwarfRegNum<[31]>;
 // Special purpose registers
 let Namespace = "OR1K" in {
 def SR : Register<"SR">;        // Supervisor Registor (contains flags)
+def MACLO : Register<"MACLO">;
+def MACHI : Register<"MACHI">;
 }
 // Register classes.
 //
@@ -81,7 +83,7 @@ def GPR : RegisterClass<"OR1K", [i32,f32], 32, (add R3, R4, R5, R6, R7,
                                      R0   // constant 0
                                      )>;
 
-def SPR : RegisterClass<"OR1K", [i32], 32, (add SR)> {
+def SPR : RegisterClass<"OR1K", [i32], 32, (add SR, MACLO, MACHI)> {
   let CopyCost = -1;  // Don't allow copying of special purpose registers.
   let isAllocatable = 0;
 }
