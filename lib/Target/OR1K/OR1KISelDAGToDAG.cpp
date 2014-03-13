@@ -86,6 +86,7 @@ private:
   SDNode *Select(SDNode *N);
 
   SDNode* SelectFrameIndex(SDNode *Node);
+  SDNode* SelectMulHiLo(SDNode *Node, bool Signed);
 
   // Complex Pattern for address selection.
   bool SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset);
@@ -203,6 +204,8 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
   switch(Opcode) {
     default: break;
     case ISD::FrameIndex:    return SelectFrameIndex(Node);
+    case ISD::UMUL_LOHI:     return SelectMulHiLo(Node, false);
+    case ISD::SMUL_LOHI:     return SelectMulHiLo(Node, true);
   }
 
   // Select the default instruction
@@ -227,6 +230,24 @@ SDNode* OR1KDAGToDAGISel::SelectFrameIndex(SDNode *Node) {
   if (Node->hasOneUse())
     return CurDAG->SelectNodeTo(Node, Opc, VT, TFI, imm);
   return CurDAG->getMachineNode(Opc, SDLoc(Node), VT, TFI, imm);
+}
+
+SDNode* OR1KDAGToDAGISel::SelectMulHiLo(SDNode *Node, bool Signed) {
+  SDLoc dl(Node);
+  EVT NodeTy = Node->getValueType(0);
+  unsigned Opcode = Signed ? OR1K::MULD : OR1K::MULDU;
+
+  SDNode *Mul = CurDAG->getMachineNode(Opcode, dl, MVT::Other,
+          Node->getOperand(0), Node->getOperand(1));
+
+  SDValue Chain(Mul, 0);
+  SDValue Lo = CurDAG->getCopyFromReg(Chain, dl, OR1K::MACLO, NodeTy);
+  SDValue Hi = CurDAG->getCopyFromReg(Chain, dl, OR1K::MACHI, NodeTy);
+
+  CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 0), Lo);
+  CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 1), Hi);
+
+  return Mul;
 }
 
 /// createOR1KISelDag - This pass converts a legalized DAG into a
