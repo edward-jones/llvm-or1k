@@ -85,6 +85,8 @@ private:
 
   SDNode *Select(SDNode *N);
 
+  SDNode* SelectFrameIndex(SDNode *Node);
+
   // Complex Pattern for address selection.
   bool SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset);
 
@@ -196,23 +198,11 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
     return NULL;
   }
 
-  ///
   // Instruction Selection not handled by the auto-generated
   // tablegen selection should be handled here.
-  ///
   switch(Opcode) {
     default: break;
-
-    case ISD::FrameIndex: {
-        SDValue imm = CurDAG->getTargetConstant(0, MVT::i32);
-        int FI = dyn_cast<FrameIndexSDNode>(Node)->getIndex();
-        EVT VT = Node->getValueType(0);
-        SDValue TFI = CurDAG->getTargetFrameIndex(FI, VT);
-        unsigned Opc = OR1K::ADDI;
-        if (Node->hasOneUse())
-          return CurDAG->SelectNodeTo(Node, Opc, VT, TFI, imm);
-        return CurDAG->getMachineNode(Opc, SDLoc(Node), VT, TFI, imm);
-    }
+    case ISD::FrameIndex:    return SelectFrameIndex(Node);
   }
 
   // Select the default instruction
@@ -224,7 +214,19 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
   else
     DEBUG(ResNode->dump(CurDAG));
   DEBUG(errs() << "\n");
+
   return ResNode;
+}
+
+SDNode* OR1KDAGToDAGISel::SelectFrameIndex(SDNode *Node) {
+  SDValue imm = CurDAG->getTargetConstant(0, MVT::i32);
+  int FI = dyn_cast<FrameIndexSDNode>(Node)->getIndex();
+  EVT VT = Node->getValueType(0);
+  SDValue TFI = CurDAG->getTargetFrameIndex(FI, VT);
+  unsigned Opc = OR1K::ADDI;
+  if (Node->hasOneUse())
+    return CurDAG->SelectNodeTo(Node, Opc, VT, TFI, imm);
+  return CurDAG->getMachineNode(Opc, SDLoc(Node), VT, TFI, imm);
 }
 
 /// createOR1KISelDag - This pass converts a legalized DAG into a
