@@ -328,6 +328,33 @@ let Predicates=[HasDiv] in {
   def DIVU : ALU_OPT_RR<0xa, "l.divu", udiv, II_DIV>;
 }
 
+class ALU_D<bits<2> op2Val, bits<4> op3Val, string asmstr,
+             list<dag> pattern, InstrItinClass itin>
+  : InstRR<0x8, (outs), (ins GPR:$rA, GPR:$rB),
+           !strconcat(asmstr, "\t$rA, $rB"), pattern, itin> {
+  bits<5> rA;
+  bits<5> rB;
+  bits<2> op2;
+  bits<4> op3;
+
+  let Inst{20-16} = rA;
+  let Inst{15-11} = rB;
+
+  let Inst{9-8} = op2;
+  let Inst{3-0} = op3;
+
+  let op2 = op2Val;
+  let op3 = op3Val;
+}
+
+class ALU_MULD<bits<4> subOp, string asmstr, InstrItinClass itin>
+  : ALU_D<0x3, subOp, asmstr, [], itin>;
+
+let isCommutable = 1, neverHasSideEffects = 1, Defs = [MACLO, MACHI] in {
+  def MULD  : ALU_MULD<0x7, "l.muld", II_MUL>;
+  def MULDU : ALU_MULD<0xc, "l.muldu", II_MUL>;
+}
+
 class ALU2_RR<bits<2> subOp1, bits<4> subOp2, string asmstr, SDNode OpNode>
   : InstRR<0x8, (outs GPR:$rD), (ins GPR:$rA),
            !strconcat(asmstr, "\t$rD, $rA"),
