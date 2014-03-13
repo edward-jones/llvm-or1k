@@ -42,8 +42,17 @@ void OR1KInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     BuildMI(MBB, I, DL, get(OR1K::ORI), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc))
       .addImm(0);
-  else
-    llvm_unreachable("Impossible reg-to-reg copy");
+  else if (OR1K::SPRRegClass.contains(SrcReg, DestReg))
+    llvm_unreachable("Impossible reg-to-reg copy with special register as"
+            "source and destination");
+  else if (OR1K::SPRRegClass.contains(SrcReg))
+    BuildMI(MBB, I, DL, get(OR1K::MFSPR), DestReg)
+      .addReg(OR1K::R0)
+      .addImm(RI.getEncodingValue(SrcReg));
+  else if(OR1K::SPRRegClass.contains(DestReg))
+    BuildMI(MBB, I, DL, get(OR1K::MTSPR), SrcReg)
+      .addReg(OR1K::R0)
+      .addImm(RI.getEncodingValue(DestReg));
 }
 
 void OR1KInstrInfo::
