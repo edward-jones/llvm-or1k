@@ -11,7 +11,7 @@
 //  Declarations that describe the OR1K register file
 //===----------------------------------------------------------------------===//
 
-class OR1KReg<bits<16> Enc, string n> : Register<n> {
+class Ri<bits<16> Enc, string n> : Register<n> {
   let HWEncoding = Enc;
   let Namespace = "OR1K";
 }
@@ -20,10 +20,6 @@ let Namespace = "OR1K" in {
 def sub_even : SubRegIndex<32>;
 def sub_odd  : SubRegIndex<32>;
 }
-
-// Registers are identified with 5-bit ID numbers.
-// Ri - 32-bit integer registers
-class Ri<bits<16> num, string n> : OR1KReg<num, n>;
 
 // Integer registers
 def R0 : Ri< 0, "r0">, DwarfRegNum<[0]>;
@@ -59,12 +55,21 @@ def R29 : Ri<29, "r29">, DwarfRegNum<[29]>;
 def R30 : Ri<30, "r30">, DwarfRegNum<[30]>;
 def R31 : Ri<31, "r31">, DwarfRegNum<[31]>;
 
-// Special purpose registers
-let Namespace = "OR1K" in {
-def SR : Register<"SR">;        // Supervisor Registor (contains flags)
-def MACLO : Register<"MACLO">;
-def MACHI : Register<"MACHI">;
+class SPRi<bits<5> group, bits<11> num, string n> : Register<n> {
+  bits<16> Enc;
+
+  let Enc{15-11} = group;
+  let Enc{10-0} = num;
+
+  let HWEncoding = Enc;
+  let Namespace = "OR1K";
 }
+
+// Special purpose registers
+def SR    : SPRi<0 ,17, "SR">, DwarfRegNum<[32]>;
+def MACLO : SPRi<5, 1, "MACLO">, DwarfRegNum<[33]>;
+def MACHI : SPRi<5, 2, "MACHI">, DwarfRegNum<[34]>;
+
 // Register classes.
 //
 // FIXME: the register order should be defined in terms of the preferred
