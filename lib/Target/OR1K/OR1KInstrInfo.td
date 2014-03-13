@@ -734,9 +734,9 @@ def MACRC : MAC_R<"l.macrc", []>;
 // MOVE from/to special register
 //===----------------------------------------------------------------------===//
 
-class MOVE_FROM_SP<string asmstr, list<dag> pattern>
+class MOVE_FROM_SP<string asmstr>
   : InstRI<0xd, (outs GPR:$rD), (ins GPR:$rA, s16imm:$imm),
-    !strconcat(asmstr, "\t$rD, $rA, $imm"), pattern > {
+    !strconcat(asmstr, "\t$rD, $rA, $imm"), []> {
   bits<5> rD;
   bits<5> rA;
   bits<16> imm;
@@ -746,11 +746,11 @@ class MOVE_FROM_SP<string asmstr, list<dag> pattern>
   let Inst{15-0} = imm;
 }
 
-def MFSPR : MOVE_FROM_SP<"l.mfspr", []>;
+def MFSPR : MOVE_FROM_SP<"l.mfspr">;
 
-class MOVE_TO_SP<string asmstr, list<dag> pattern>
+class MOVE_TO_SP<string asmstr>
   : InstRR<0x0, (outs), (ins GPR:$rA, GPR:$rB, s16imm:$imm),
-    !strconcat(asmstr, "\t$rA, $rB, $imm"), pattern > {
+    !strconcat(asmstr, "\t$rA, $rB, $imm"), []> {
   bits<5> rA;
   bits<5> rB;
   bits<16> imm;
@@ -761,7 +761,7 @@ class MOVE_TO_SP<string asmstr, list<dag> pattern>
   let Inst{10-0} = imm{10-0};
 }
 
-def MTSPR : MOVE_TO_SP<"l.mtspr", []>;
+def MTSPR : MOVE_TO_SP<"l.mtspr">;
 
 //===----------------------------------------------------------------------===//
 // Non-Instruction Patterns
