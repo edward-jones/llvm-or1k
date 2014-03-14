@@ -40,7 +40,7 @@ class DarwinAsmParser : public MCAsmParserExtension {
 public:
   DarwinAsmParser() {}
 
-  virtual void Initialize(MCAsmParser &Parser) {
+  void Initialize(MCAsmParser &Parser) override {
     // Call the base implementation.
     this->MCAsmParserExtension::Initialize(Parser);
 
@@ -428,7 +428,7 @@ bool DarwinAsmParser::ParseDirectiveDesc(StringRef, SMLoc) {
 bool DarwinAsmParser::ParseDirectiveIndirectSymbol(StringRef, SMLoc Loc) {
   const MCSectionMachO *Current = static_cast<const MCSectionMachO*>(
                                        getStreamer().getCurrentSection().first);
-  unsigned SectionType = Current->getType();
+  MachO::SectionType SectionType = Current->getType();
   if (SectionType != MachO::S_NON_LAZY_SYMBOL_POINTERS &&
       SectionType != MachO::S_LAZY_SYMBOL_POINTERS &&
       SectionType != MachO::S_SYMBOL_STUBS)

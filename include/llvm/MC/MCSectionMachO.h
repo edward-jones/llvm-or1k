@@ -53,18 +53,21 @@ public:
     return StringRef(SectionName);
   }
 
-  virtual std::string getLabelBeginName() const {
+  std::string getLabelBeginName() const override {
     return StringRef(getSegmentName().str() + getSectionName().str() + "_begin");
   }
 
-  virtual std::string getLabelEndName() const {
+  std::string getLabelEndName() const override {
     return StringRef(getSegmentName().str() + getSectionName().str() + "_end");
   }
 
   unsigned getTypeAndAttributes() const { return TypeAndAttributes; }
   unsigned getStubSize() const { return Reserved2; }
 
-  unsigned getType() const { return TypeAndAttributes & MachO::SECTION_TYPE; }
+  MachO::SectionType getType() const {
+    return static_cast<MachO::SectionType>(TypeAndAttributes &
+                                           MachO::SECTION_TYPE);
+  }
   bool hasAttribute(unsigned Value) const {
     return (TypeAndAttributes & Value) != 0;
   }
@@ -82,11 +85,10 @@ public:
                                            bool      &TAAParsed, // Out.
                                            unsigned  &StubSize); // Out.
 
-  virtual void PrintSwitchToSection(const MCAsmInfo &MAI,
-                                    raw_ostream &OS,
-                                    const MCExpr *Subsection) const;
-  virtual bool UseCodeAlign() const;
-  virtual bool isVirtualSection() const;
+  void PrintSwitchToSection(const MCAsmInfo &MAI, raw_ostream &OS,
+                            const MCExpr *Subsection) const override;
+  bool UseCodeAlign() const override;
+  bool isVirtualSection() const override;
 
   static bool classof(const MCSection *S) {
     return S->getVariant() == SV_MachO;

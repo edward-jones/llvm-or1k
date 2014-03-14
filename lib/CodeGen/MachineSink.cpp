@@ -60,9 +60,9 @@ namespace {
       initializeMachineSinkingPass(*PassRegistry::getPassRegistry());
     }
 
-    virtual bool runOnMachineFunction(MachineFunction &MF);
+    bool runOnMachineFunction(MachineFunction &MF) override;
 
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesCFG();
       MachineFunctionPass::getAnalysisUsage(AU);
       AU.addRequired<AliasAnalysis>();
@@ -72,7 +72,7 @@ namespace {
       AU.addPreserved<MachineLoopInfo>();
     }
 
-    virtual void releaseMemory() {
+    void releaseMemory() override {
       CEBCandidates.clear();
     }
 
@@ -174,7 +174,7 @@ MachineSinking::AllUsesDominatedByBlock(unsigned Reg,
   for (MachineRegisterInfo::use_nodbg_iterator
          I = MRI->use_nodbg_begin(Reg), E = MRI->use_nodbg_end();
        I != E; ++I) {
-    MachineInstr *UseInst = &*I;
+    MachineInstr *UseInst = I->getParent();
     MachineBasicBlock *UseBlock = UseInst->getParent();
     if (!(UseBlock == MBB && UseInst->isPHI() &&
           UseInst->getOperand(I.getOperandNo()+1).getMBB() == DefMBB)) {
@@ -189,7 +189,7 @@ MachineSinking::AllUsesDominatedByBlock(unsigned Reg,
          I = MRI->use_nodbg_begin(Reg), E = MRI->use_nodbg_end();
        I != E; ++I) {
     // Determine the block of the use.
-    MachineInstr *UseInst = &*I;
+    MachineInstr *UseInst = I->getParent();
     MachineBasicBlock *UseBlock = UseInst->getParent();
     if (UseInst->isPHI()) {
       // PHI nodes use the operand in the predecessor block, not the block with
@@ -450,8 +450,8 @@ bool MachineSinking::isProfitableToSinkTo(unsigned Reg, MachineInstr *MI,
 
   // Check if only use in post dominated block is PHI instruction.
   bool NonPHIUse = false;
-  for (MachineRegisterInfo::use_nodbg_iterator
-         I = MRI->use_nodbg_begin(Reg), E = MRI->use_nodbg_end();
+  for (MachineRegisterInfo::use_instr_nodbg_iterator
+         I = MRI->use_instr_nodbg_begin(Reg), E = MRI->use_instr_nodbg_end();
        I != E; ++I) {
     MachineInstr *UseInst = &*I;
     MachineBasicBlock *UseBlock = UseInst->getParent();

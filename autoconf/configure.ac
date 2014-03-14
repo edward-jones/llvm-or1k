@@ -166,7 +166,6 @@ for i in `ls ${srcdir}/projects`
 do
   if test -d ${srcdir}/projects/${i} ; then
     case ${i} in
-      sample)       AC_CONFIG_SUBDIRS([projects/sample])    ;;
       safecode)     AC_CONFIG_SUBDIRS([projects/safecode]) ;;
       compiler-rt)       ;;
       test-suite)     ;;
@@ -641,6 +640,20 @@ case "$enableval" in
   no)  AC_SUBST(ENABLE_CLANG_ARCMT,[0]) ;;
   default) AC_SUBST(ENABLE_CLANG_ARCMT,[1]);;
   *) AC_MSG_ERROR([Invalid setting for --enable-clang-arcmt. Use "yes" or "no"]) ;;
+esac
+
+dnl --enable-clang-plugin-support: check whether to enable plugins in clang
+clang_plugin_support="yes"
+AC_ARG_ENABLE(clang-plugin-support,
+              AS_HELP_STRING([--enable-clang-plugin-support],
+                             [Enable plugin support in clang (default is YES)]),
+                             clang_plugin_support="$enableval",
+                             enableval="yes")
+case "$enableval" in
+  yes) AC_SUBST(CLANG_PLUGIN_SUPPORT,[1]) ;;
+  no)  AC_SUBST(CLANG_PLUGIN_SUPPORT,[0]) ;;
+  default) AC_SUBST(CLANG_PLUGIN_SUPPORT,[1]);;
+  *) AC_MSG_ERROR([Invalid setting for --enable-clang-plugin-support. Use "yes" or "no"]) ;;
 esac
 
 dnl --enable-clang-static-analyzer: check whether to enable static-analyzer

@@ -150,17 +150,17 @@ namespace {
       spillImpossible = ~0u
     };
   public:
-    virtual const char *getPassName() const {
+    const char *getPassName() const override {
       return "Fast Register Allocator";
     }
 
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesCFG();
       MachineFunctionPass::getAnalysisUsage(AU);
     }
 
   private:
-    bool runOnMachineFunction(MachineFunction &Fn);
+    bool runOnMachineFunction(MachineFunction &Fn) override;
     void AllocateBasicBlock();
     void handleThroughOperands(MachineInstr *MI,
                                SmallVectorImpl<unsigned> &VirtDead);
@@ -224,7 +224,7 @@ bool RAFast::isLastUseOfLocalReg(MachineOperand &MO) {
 
   // Check that the use/def chain has exactly one operand - MO.
   MachineRegisterInfo::reg_nodbg_iterator I = MRI->reg_nodbg_begin(MO.getReg());
-  if (&I.getOperand() != &MO)
+  if (&*I != &MO)
     return false;
   return ++I == MRI->reg_nodbg_end();
 }
@@ -590,7 +590,7 @@ RAFast::defineVirtReg(MachineInstr *MI, unsigned OpNum,
     // If there is no hint, peek at the only use of this register.
     if ((!Hint || !TargetRegisterInfo::isPhysicalRegister(Hint)) &&
         MRI->hasOneNonDBGUse(VirtReg)) {
-      const MachineInstr &UseMI = *MRI->use_nodbg_begin(VirtReg);
+      const MachineInstr &UseMI = *MRI->use_instr_nodbg_begin(VirtReg);
       // It's a copy, use the destination register as a hint.
       if (UseMI.isCopyLike())
         Hint = UseMI.getOperand(0).getReg();

@@ -3605,14 +3605,15 @@ static SDValue InsertFenceForAtomic(SDValue Chain, AtomicOrdering Order,
 
 void SelectionDAGBuilder::visitAtomicCmpXchg(const AtomicCmpXchgInst &I) {
   SDLoc dl = getCurSDLoc();
-  AtomicOrdering Order = I.getOrdering();
+  AtomicOrdering SuccessOrder = I.getSuccessOrdering();
+  AtomicOrdering FailureOrder = I.getFailureOrdering();
   SynchronizationScope Scope = I.getSynchScope();
 
   SDValue InChain = getRoot();
 
   const TargetLowering *TLI = TM.getTargetLowering();
   if (TLI->getInsertFencesForAtomic())
-    InChain = InsertFenceForAtomic(InChain, Order, Scope, true, dl,
+    InChain = InsertFenceForAtomic(InChain, SuccessOrder, Scope, true, dl,
                                    DAG, *TLI);
 
   SDValue L =
@@ -3623,13 +3624,14 @@ void SelectionDAGBuilder::visitAtomicCmpXchg(const AtomicCmpXchgInst &I) {
                   getValue(I.getCompareOperand()),
                   getValue(I.getNewValOperand()),
                   MachinePointerInfo(I.getPointerOperand()), 0 /* Alignment */,
-                  TLI->getInsertFencesForAtomic() ? Monotonic : Order,
+                  TLI->getInsertFencesForAtomic() ? Monotonic : SuccessOrder,
+                  TLI->getInsertFencesForAtomic() ? Monotonic : FailureOrder,
                   Scope);
 
   SDValue OutChain = L.getValue(1);
 
   if (TLI->getInsertFencesForAtomic())
-    OutChain = InsertFenceForAtomic(OutChain, Order, Scope, false, dl,
+    OutChain = InsertFenceForAtomic(OutChain, SuccessOrder, Scope, false, dl,
                                     DAG, *TLI);
 
   setValue(&I, L);
@@ -5580,9 +5582,8 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
 /// IsOnlyUsedInZeroEqualityComparison - Return true if it only matters that the
 /// value is equal or not-equal to zero.
 static bool IsOnlyUsedInZeroEqualityComparison(const Value *V) {
-  for (Value::const_use_iterator UI = V->use_begin(), E = V->use_end();
-       UI != E; ++UI) {
-    if (const ICmpInst *IC = dyn_cast<ICmpInst>(*UI))
+  for (const User *U : V->users()) {
+    if (const ICmpInst *IC = dyn_cast<ICmpInst>(U))
       if (IC->isEquality())
         if (const Constant *C = dyn_cast<Constant>(IC->getOperand(1)))
           if (C->isNullValue())
@@ -7326,12 +7327,10 @@ static bool isOnlyUsedInEntryBlock(const Argument *A, bool FastISel) {
     return A->use_empty();
 
   const BasicBlock *Entry = A->getParent()->begin();
-  for (Value::const_use_iterator UI = A->use_begin(), E = A->use_end();
-       UI != E; ++UI) {
-    const User *U = *UI;
+  for (const User *U : A->users())
     if (cast<Instruction>(U)->getParent() != Entry || isa<SwitchInst>(U))
       return false;  // Use not in entry block.
-  }
+
   return true;
 }
 

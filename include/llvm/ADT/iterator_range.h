@@ -40,7 +40,6 @@ public:
   IteratorT begin() const { return begin_iterator; }
   IteratorT end() const { return end_iterator; }
 };
-
 }
 
 #endif

@@ -177,7 +177,7 @@ public:
     delete AvailableQueue;
   }
 
-  void Schedule();
+  void Schedule() override;
 
   ScheduleHazardRecognizer *getHazardRec() { return HazardRec; }
 
@@ -261,7 +261,7 @@ private:
 
   /// forceUnitLatencies - Register-pressure-reducing scheduling doesn't
   /// need actual latency information but the hybrid scheduler does.
-  bool forceUnitLatencies() const {
+  bool forceUnitLatencies() const override {
     return !NeedLatency;
   }
 };
@@ -1539,7 +1539,6 @@ template<class SF>
 struct reverse_sort : public queue_sort {
   SF &SortFunc;
   reverse_sort(SF &sf) : SortFunc(sf) {}
-  reverse_sort(const reverse_sort &RHS) : SortFunc(RHS.SortFunc) {}
 
   bool operator()(SUnit* left, SUnit* right) const {
     // reverse left/right rather than simply !SortFunc(left, right)
@@ -1559,7 +1558,6 @@ struct bu_ls_rr_sort : public queue_sort {
 
   RegReductionPQBase *SPQ;
   bu_ls_rr_sort(RegReductionPQBase *spq) : SPQ(spq) {}
-  bu_ls_rr_sort(const bu_ls_rr_sort &RHS) : SPQ(RHS.SPQ) {}
 
   bool operator()(SUnit* left, SUnit* right) const;
 };
@@ -1574,8 +1572,6 @@ struct src_ls_rr_sort : public queue_sort {
   RegReductionPQBase *SPQ;
   src_ls_rr_sort(RegReductionPQBase *spq)
     : SPQ(spq) {}
-  src_ls_rr_sort(const src_ls_rr_sort &RHS)
-    : SPQ(RHS.SPQ) {}
 
   bool operator()(SUnit* left, SUnit* right) const;
 };
@@ -1590,8 +1586,6 @@ struct hybrid_ls_rr_sort : public queue_sort {
   RegReductionPQBase *SPQ;
   hybrid_ls_rr_sort(RegReductionPQBase *spq)
     : SPQ(spq) {}
-  hybrid_ls_rr_sort(const hybrid_ls_rr_sort &RHS)
-    : SPQ(RHS.SPQ) {}
 
   bool isReady(SUnit *SU, unsigned CurCycle) const;
 
@@ -1609,8 +1603,6 @@ struct ilp_ls_rr_sort : public queue_sort {
   RegReductionPQBase *SPQ;
   ilp_ls_rr_sort(RegReductionPQBase *spq)
     : SPQ(spq) {}
-  ilp_ls_rr_sort(const ilp_ls_rr_sort &RHS)
-    : SPQ(RHS.SPQ) {}
 
   bool isReady(SUnit *SU, unsigned CurCycle) const;
 
@@ -1675,13 +1667,13 @@ public:
     return scheduleDAG->getHazardRec();
   }
 
-  void initNodes(std::vector<SUnit> &sunits);
+  void initNodes(std::vector<SUnit> &sunits) override;
 
-  void addNode(const SUnit *SU);
+  void addNode(const SUnit *SU) override;
 
-  void updateNode(const SUnit *SU);
+  void updateNode(const SUnit *SU) override;
 
-  void releaseState() {
+  void releaseState() override {
     SUnits = 0;
     SethiUllmanNumbers.clear();
     std::fill(RegPressure.begin(), RegPressure.end(), 0);
@@ -1695,15 +1687,15 @@ public:
     return SU->getNode()->getIROrder();
   }
 
-  bool empty() const { return Queue.empty(); }
+  bool empty() const override { return Queue.empty(); }
 
-  void push(SUnit *U) {
+  void push(SUnit *U) override {
     assert(!U->NodeQueueId && "Node in the queue already");
     U->NodeQueueId = ++CurQueueId;
     Queue.push_back(U);
   }
 
-  void remove(SUnit *SU) {
+  void remove(SUnit *SU) override {
     assert(!Queue.empty() && "Queue is empty!");
     assert(SU->NodeQueueId != 0 && "Not in queue!");
     std::vector<SUnit *>::iterator I = std::find(Queue.begin(), Queue.end(),
@@ -1714,7 +1706,7 @@ public:
     SU->NodeQueueId = 0;
   }
 
-  bool tracksRegPressure() const { return TracksRegPressure; }
+  bool tracksRegPressure() const override { return TracksRegPressure; }
 
   void dumpRegPressure() const;
 
@@ -1724,9 +1716,9 @@ public:
 
   int RegPressureDiff(SUnit *SU, unsigned &LiveUses) const;
 
-  void scheduledNode(SUnit *SU);
+  void scheduledNode(SUnit *SU) override;
 
-  void unscheduledNode(SUnit *SU);
+  void unscheduledNode(SUnit *SU) override;
 
 protected:
   bool canClobber(const SUnit *SU, const SUnit *Op);
@@ -1776,13 +1768,13 @@ public:
                          tii, tri, tli),
       Picker(this) {}
 
-  bool isBottomUp() const { return SF::IsBottomUp; }
+  bool isBottomUp() const override { return SF::IsBottomUp; }
 
-  bool isReady(SUnit *U) const {
+  bool isReady(SUnit *U) const override {
     return Picker.HasReadyFilter && Picker.isReady(U, getCurCycle());
   }
 
-  SUnit *pop() {
+  SUnit *pop() override {
     if (Queue.empty()) return NULL;
 
     SUnit *V = popFromQueue(Queue, Picker, scheduleDAG);

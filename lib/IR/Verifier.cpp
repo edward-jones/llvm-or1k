@@ -479,20 +479,21 @@ void Verifier::visitGlobalAlias(const GlobalAlias &GA) {
   Assert1(!GA.getAlignment(), "Alias connot have an alignment", &GA);
 
   const Constant *Aliasee = GA.getAliasee();
+  const GlobalValue *GV = dyn_cast<GlobalValue>(Aliasee);
 
-  if (!isa<GlobalValue>(Aliasee)) {
+  if (!GV) {
     const ConstantExpr *CE = dyn_cast<ConstantExpr>(Aliasee);
-    Assert1(CE &&
-            (CE->getOpcode() == Instruction::BitCast ||
-             CE->getOpcode() == Instruction::AddrSpaceCast ||
-             CE->getOpcode() == Instruction::GetElementPtr) &&
-            isa<GlobalValue>(CE->getOperand(0)),
-            "Aliasee should be either GlobalValue, bitcast or "
-             "addrspacecast of GlobalValue",
+    if (CE && (CE->getOpcode() == Instruction::BitCast ||
+               CE->getOpcode() == Instruction::AddrSpaceCast ||
+               CE->getOpcode() == Instruction::GetElementPtr))
+      GV = dyn_cast<GlobalValue>(CE->getOperand(0));
+
+    Assert1(GV, "Aliasee should be either GlobalValue, bitcast or "
+                "addrspacecast of GlobalValue",
             &GA);
 
     if (CE->getOpcode() == Instruction::BitCast) {
-      unsigned SrcAS = CE->getOperand(0)->getType()->getPointerAddressSpace();
+      unsigned SrcAS = GV->getType()->getPointerAddressSpace();
       unsigned DstAS = CE->getType()->getPointerAddressSpace();
 
       Assert1(SrcAS == DstAS,
@@ -500,6 +501,7 @@ void Verifier::visitGlobalAlias(const GlobalAlias &GA) {
               &GA);
     }
   }
+  Assert1(!GV->isDeclaration(), "Alias must point to a definition", &GA);
 
   const GlobalValue* Resolved = GA.resolveAliasedGlobal(/*stopOnWeak*/ false);
   Assert1(Resolved,
@@ -1829,10 +1831,23 @@ void Verifier::visitAllocaInst(AllocaInst &AI) {
 }
 
 void Verifier::visitAtomicCmpXchgInst(AtomicCmpXchgInst &CXI) {
-  Assert1(CXI.getOrdering() != NotAtomic,
+
+  // FIXME: more conditions???
+  Assert1(CXI.getSuccessOrdering() != NotAtomic,
           "cmpxchg instructions must be atomic.", &CXI);
-  Assert1(CXI.getOrdering() != Unordered,
+  Assert1(CXI.getFailureOrdering() != NotAtomic,
+          "cmpxchg instructions must be atomic.", &CXI);
+  Assert1(CXI.getSuccessOrdering() != Unordered,
           "cmpxchg instructions cannot be unordered.", &CXI);
+  Assert1(CXI.getFailureOrdering() != Unordered,
+          "cmpxchg instructions cannot be unordered.", &CXI);
+  Assert1(CXI.getSuccessOrdering() >= CXI.getFailureOrdering(),
+          "cmpxchg instructions be at least as constrained on success as fail",
+          &CXI);
+  Assert1(CXI.getFailureOrdering() != Release &&
+              CXI.getFailureOrdering() != AcquireRelease,
+          "cmpxchg failure ordering cannot include release semantics", &CXI);
+
   PointerType *PTy = dyn_cast<PointerType>(CXI.getOperand(0)->getType());
   Assert1(PTy, "First cmpxchg operand must be a pointer.", &CXI);
   Type *ElTy = PTy->getElementType();
@@ -1974,10 +1989,10 @@ void Verifier::visitInstruction(Instruction &I) {
   Assert1(BB, "Instruction not embedded in basic block!", &I);
 
   if (!isa<PHINode>(I)) {   // Check that non-phi nodes are not self referential
-    for (Value::use_iterator UI = I.use_begin(), UE = I.use_end();
-         UI != UE; ++UI)
-      Assert1(*UI != (User*)&I || !DT.isReachableFromEntry(BB),
+    for (User *U : I.users()) {
+      Assert1(U != (User*)&I || !DT.isReachableFromEntry(BB),
               "Only PHI nodes may reference their own value!", &I);
+    }
   }
 
   // Check that void typed values don't have names
@@ -1999,13 +2014,12 @@ void Verifier::visitInstruction(Instruction &I) {
   // Check that all uses of the instruction, if they are instructions
   // themselves, actually have parent basic blocks.  If the use is not an
   // instruction, it is an error!
-  for (User::use_iterator UI = I.use_begin(), UE = I.use_end();
-       UI != UE; ++UI) {
-    if (Instruction *Used = dyn_cast<Instruction>(*UI))
+  for (Use &U : I.uses()) {
+    if (Instruction *Used = dyn_cast<Instruction>(U.getUser()))
       Assert2(Used->getParent() != 0, "Instruction referencing instruction not"
               " embedded in a basic block!", &I, Used);
     else {
-      CheckFailed("Use of instruction is not an instruction!", *UI);
+      CheckFailed("Use of instruction is not an instruction!", U);
       return;
     }
   }
@@ -2240,8 +2254,10 @@ void Verifier::visitIntrinsicFunctionCall(Intrinsic::ID ID, CallInst &CI) {
   // know they are legal for the intrinsic!) get the intrinsic name through the
   // usual means.  This allows us to verify the mangling of argument types into
   // the name.
-  Assert1(Intrinsic::getName(ID, ArgTys) == IF->getName(),
-          "Intrinsic name not mangled correctly for type arguments!", IF);
+  const std::string ExpectedName = Intrinsic::getName(ID, ArgTys);
+  Assert1(ExpectedName == IF->getName(),
+          "Intrinsic name not mangled correctly for type arguments! "
+          "Should be: " + ExpectedName, IF);
 
   // If the intrinsic takes MDNode arguments, verify that they are either global
   // or are local to *this* function.

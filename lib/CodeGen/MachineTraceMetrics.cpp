@@ -302,9 +302,9 @@ static bool isExitingLoop(const MachineLoop *From, const MachineLoop *To) {
 // instructions.
 namespace {
 class MinInstrCountEnsemble : public MachineTraceMetrics::Ensemble {
-  const char *getName() const { return "MinInstr"; }
-  const MachineBasicBlock *pickTracePred(const MachineBasicBlock*);
-  const MachineBasicBlock *pickTraceSucc(const MachineBasicBlock*);
+  const char *getName() const override { return "MinInstr"; }
+  const MachineBasicBlock *pickTracePred(const MachineBasicBlock*) override;
+  const MachineBasicBlock *pickTraceSucc(const MachineBasicBlock*) override;
 
 public:
   MinInstrCountEnsemble(MachineTraceMetrics *mtm)
@@ -627,7 +627,7 @@ struct DataDep {
     assert(TargetRegisterInfo::isVirtualRegister(VirtReg));
     MachineRegisterInfo::def_iterator DefI = MRI->def_begin(VirtReg);
     assert(!DefI.atEnd() && "Register has no defs");
-    DefMI = &*DefI;
+    DefMI = DefI->getParent();
     DefOp = DefI.getOperandNo();
     assert((++DefI).atEnd() && "Register has multiple defs");
   }
