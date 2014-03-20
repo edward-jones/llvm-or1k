@@ -56,6 +56,7 @@ public:
 
   virtual bool addInstSelector();
   virtual bool addPreEmitPass();
+  virtual bool addPreISel();
 };
 } // namespace
 
@@ -79,7 +80,11 @@ bool OR1KPassConfig::addInstSelector() {
 
 bool OR1KPassConfig::addPreEmitPass() {
   addPass(createOR1KDelaySlotFillerPass(getOR1KTargetMachine()));
-  //addPass(createOR1KMACSubPass(getOR1KTargetMachine()));
   addPass(createOR1KFunnyNOPReplacer(getOR1KTargetMachine()));
+  return true;
+}
+
+bool OR1KPassConfig::addPreISel() {
+  addPass(createOR1KMACSubPass(getOR1KTargetMachine()));
   return true;
 }
