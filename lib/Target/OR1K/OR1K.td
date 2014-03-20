@@ -56,7 +56,7 @@ def FeatureFBit  : SubtargetFeature<"fbit", "HasFBit", "true",
 //===----------------------------------------------------------------------===//
 
 class Proc<string Name, list<SubtargetFeature> Features>
- : Processor<Name, NoItineraries, Features>;
+ : Processor<Name, OR1KGenericItineraries, Features>;
 
 def : Proc<"generic", [FeatureMul, FeatureDiv]>;
 def : Proc<"or1200",  [FeatureMul, FeatureDiv]>;
