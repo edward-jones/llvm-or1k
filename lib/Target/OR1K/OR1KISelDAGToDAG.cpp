@@ -234,15 +234,15 @@ SDNode* OR1KDAGToDAGISel::SelectFrameIndex(SDNode *Node) {
 
 SDNode* OR1KDAGToDAGISel::SelectMulHiLo(SDNode *Node, bool Signed) {
   SDLoc dl(Node);
-  EVT NodeTy = Node->getValueType(0);
+  EVT Out0Ty = Node->getValueType(0), Out1Ty = Node->getValueType(1);
+  const SDValue& Op0 = Node->getOperand(0), Op1 = Node->getOperand(1);
   unsigned Opcode = Signed ? OR1K::MULD : OR1K::MULDU;
 
-  SDNode *Mul = CurDAG->getMachineNode(Opcode, dl, MVT::Other,
-          Node->getOperand(0), Node->getOperand(1));
+  SDNode *Mul = CurDAG->getMachineNode(Opcode, dl, MVT::Other, Op0, Op1);
 
   SDValue Chain(Mul, 0);
-  SDValue Lo = CurDAG->getCopyFromReg(Chain, dl, OR1K::MACLO, NodeTy);
-  SDValue Hi = CurDAG->getCopyFromReg(Chain, dl, OR1K::MACHI, NodeTy);
+  SDValue Lo = CurDAG->getCopyFromReg(Chain, dl, OR1K::MACLO, Out0Ty);
+  SDValue Hi = CurDAG->getCopyFromReg(Chain, dl, OR1K::MACHI, Out1Ty);
 
   CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 0), Lo);
   CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 1), Hi);
