@@ -87,6 +87,7 @@ private:
 
   SDNode* SelectFrameIndex(SDNode *Node);
   SDNode* SelectMulHiLo(SDNode *Node, bool Signed);
+  SDNode* SelectMulHi(SDNode *Node, bool Signed);
 
   // Complex Pattern for address selection.
   bool SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset);
@@ -204,6 +205,8 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
   switch(Opcode) {
     default: break;
     case ISD::FrameIndex:    return SelectFrameIndex(Node);
+    case ISD::MULHU:         return SelectMulHi(Node, false);
+    case ISD::MULHS:         return SelectMulHi(Node, true);
     case ISD::UMUL_LOHI:     return SelectMulHiLo(Node, false);
     case ISD::SMUL_LOHI:     return SelectMulHiLo(Node, true);
   }
@@ -246,6 +249,21 @@ SDNode* OR1KDAGToDAGISel::SelectMulHiLo(SDNode *Node, bool Signed) {
 
   CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 0), Lo);
   CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 1), Hi);
+
+  return Mul;
+}
+
+SDNode* OR1KDAGToDAGISel::SelectMulHi(SDNode *Node, bool Signed) {
+  SDLoc dl(Node);
+  EVT Out0Ty = Node->getValueType(0);
+  const SDValue& Op0 = Node->getOperand(0), Op1 = Node->getOperand(1);
+  unsigned Opcode = Signed ? OR1K::MULD : OR1K::MULDU;
+
+  SDNode *Mul = CurDAG->getMachineNode(Opcode, dl, Out0Ty, Op0, Op1);
+
+  SDValue MulHi(Mul, 0);
+  SDValue Hi = CurDAG->getCopyFromReg(MulHi, dl, OR1K::MACHI, Out0Ty);
+  CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 0), Hi);
 
   return Mul;
 }
