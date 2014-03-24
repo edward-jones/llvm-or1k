@@ -56,15 +56,8 @@ static unsigned int getRandomHexSpeakCode(const unsigned (&array)[N]) {
 namespace {
   class FunnyNOP : public MachineFunctionPass {
   public:
-    /// Target machine description which we query for reg. names, data
-    /// layout, etc.
-    TargetMachine &TM;
-    const TargetInstrInfo *TII;
-    MachineBasicBlock::instr_iterator LastFiller;
-
     static char ID;
-    FunnyNOP(TargetMachine &tm)
-      : MachineFunctionPass(ID), TM(tm), TII(tm.getInstrInfo()) { }
+    FunnyNOP() : MachineFunctionPass(ID) { }
 
     virtual const char *getPassName() const {
       return "OR1K Funny NOP replacer";
@@ -84,8 +77,8 @@ namespace {
 
 /// createOR1KFunnyNOPReplacer - Returns a pass that replaces normal NOPs with
 /// funny NOPs
-FunctionPass *llvm::createOR1KFunnyNOPReplacer(OR1KTargetMachine &tm) {
-  return new FunnyNOP(tm);
+FunctionPass *llvm::createOR1KFunnyNOPReplacer() {
+  return new FunnyNOP();
 }
 
 /// runOnMachineBasicBlock - Fill in delay slots for the given basic block.

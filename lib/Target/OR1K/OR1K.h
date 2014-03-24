@@ -42,7 +42,7 @@ FunctionPass* createOR1KGlobalBaseRegPass();
 LoopPass* createOR1KMACSubPass(OR1KTargetMachine &TM);
 
 /// createOR1KFunnyNOPReplacer - This pass replaces normal NOPs with funny NOPs.
-FunctionPass* createOR1KFunnyNOPReplacer(OR1KTargetMachine &tm);
+FunctionPass* createOR1KFunnyNOPReplacer();
 
 extern Target TheOR1KTarget;
 } // end namespace llvm;
