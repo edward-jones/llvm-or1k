@@ -64,16 +64,18 @@ namespace {
     }
 
     bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
-    bool runOnMachineFunction(MachineFunction &F) {
+    bool runOnMachineFunction(MachineFunction &F) override {
       bool Changed = false;
-      for (MachineFunction::iterator FI = F.begin(), FE = F.end();
-           FI != FE; ++FI)
-        Changed |= runOnMachineBasicBlock(*FI);
+      for (MachineBasicBlock &FB : F) {
+          Changed |= runOnMachineBasicBlock(FB);
+      }
       return Changed;
     }
   };
-  char FunnyNOP::ID = 0;
+
 } // end of anonymous namespace
+
+char FunnyNOP::ID = 0;
 
 /// createOR1KFunnyNOPReplacer - Returns a pass that replaces normal NOPs with
 /// funny NOPs
@@ -91,11 +93,10 @@ bool FunnyNOP::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
     return false;
 
   // Iterate over each instruction of the basic block
-  for (MachineBasicBlock::instr_iterator I = MBB.instr_begin();
-          I != MBB.instr_end(); ++I) {
+  for (MachineInstr &I : MBB) {
     // If the instruction is a NOP replace its immediate value with a funny one.
-    if(I->getDesc().getOpcode() == OR1K::NOP) {
-      MachineOperand &NopImmediate = I->getOperand(0);
+    if(I.getDesc().getOpcode() == OR1K::NOP) {
+      MachineOperand &NopImmediate = I.getOperand(0);
       NopImmediate.setImm(getRandomHexSpeakCode(hexSpeakCodes));
       Changed = true;
     }
