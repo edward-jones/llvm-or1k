@@ -241,16 +241,7 @@ SDNode* OR1KDAGToDAGISel::SelectMulHiLo(SDNode *Node, bool Signed) {
   const SDValue& Op0 = Node->getOperand(0), Op1 = Node->getOperand(1);
   unsigned Opcode = Signed ? OR1K::MULD : OR1K::MULDU;
 
-  SDNode *Mul = CurDAG->getMachineNode(Opcode, dl, MVT::Other, Op0, Op1);
-
-  SDValue Chain(Mul, 0);
-  SDValue Lo = CurDAG->getCopyFromReg(Chain, dl, OR1K::MACLO, Out0Ty);
-  SDValue Hi = CurDAG->getCopyFromReg(Chain, dl, OR1K::MACHI, Out1Ty);
-
-  CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 0), Lo);
-  CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 1), Hi);
-
-  return Mul;
+  return CurDAG->getMachineNode(Opcode, dl, Out0Ty, Out1Ty, Op0, Op1);
 }
 
 SDNode* OR1KDAGToDAGISel::SelectMulHi(SDNode *Node, bool Signed) {
@@ -259,11 +250,8 @@ SDNode* OR1KDAGToDAGISel::SelectMulHi(SDNode *Node, bool Signed) {
   const SDValue& Op0 = Node->getOperand(0), Op1 = Node->getOperand(1);
   unsigned Opcode = Signed ? OR1K::MULD : OR1K::MULDU;
 
-  SDNode *Mul = CurDAG->getMachineNode(Opcode, dl, Out0Ty, Op0, Op1);
-
-  SDValue MulHi(Mul, 0);
-  SDValue Hi = CurDAG->getCopyFromReg(MulHi, dl, OR1K::MACHI, Out0Ty);
-  CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 0), Hi);
+  SDNode *Mul = CurDAG->getMachineNode(Opcode, dl, Out0Ty, Out0Ty, Op0, Op1);
+  CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 0), SDValue(Mul, 1));
 
   return Mul;
 }
