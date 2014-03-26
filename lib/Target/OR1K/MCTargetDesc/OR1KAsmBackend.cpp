@@ -24,9 +24,12 @@ using namespace llvm;
 // Prepare value for the target space
 static unsigned adjustFixupValue(unsigned Kind, uint64_t Value) {
   switch (Kind) {
-    // FIXME: List all valid fixups instead
     default:
-      return 0;
+      llvm_unreachable("Unknown fixup kind!");
+    case FK_Data_1:
+    case FK_Data_2:
+    case FK_Data_4:
+    break;
     case OR1K::fixup_OR1K_REL26:
     case OR1K::fixup_OR1K_PLT26:
       // Currently this is used only for branches
@@ -39,6 +42,9 @@ static unsigned adjustFixupValue(unsigned Kind, uint64_t Value) {
     case OR1K::fixup_OR1K_GOTPC_HI16:
     case OR1K::fixup_OR1K_GOTOFF_HI16:
       Value >>= 16;
+    case OR1K::fixup_OR1K_LO16_INSN:
+    case OR1K::fixup_OR1K_GOTPC_LO16:
+    case OR1K::fixup_OR1K_GOTOFF_LO16:
       Value &= 0xffff;
     break;
 
