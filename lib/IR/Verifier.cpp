@@ -76,8 +76,7 @@
 #include <cstdarg>
 using namespace llvm;
 
-static cl::opt<bool> DisableDebugInfoVerifier("disable-debug-info-verifier",
-                                              cl::init(true));
+static cl::opt<bool> VerifyDebugInfo("verify-debug-info", cl::init(false));
 
 namespace {
 class Verifier : public InstVisitor<Verifier> {
@@ -149,7 +148,7 @@ public:
     InstsInThisBlock.clear();
     PersonalityFn = 0;
 
-    if (!DisableDebugInfoVerifier)
+    if (VerifyDebugInfo)
       // Verify Debug Info.
       verifyDebugInfo();
 
@@ -187,7 +186,7 @@ public:
     visitModuleFlags(M);
     visitModuleIdents(M);
 
-    if (!DisableDebugInfoVerifier) {
+    if (VerifyDebugInfo) {
       Finder.reset();
       Finder.processModule(M);
       // Verify Debug Info.
@@ -502,10 +501,14 @@ void Verifier::visitGlobalAlias(const GlobalAlias &GA) {
     }
   }
   Assert1(!GV->isDeclaration(), "Alias must point to a definition", &GA);
+  if (const GlobalAlias *GAAliasee = dyn_cast<GlobalAlias>(GV)) {
+    Assert1(!GAAliasee->mayBeOverridden(), "Alias cannot point to a weak alias",
+            &GA);
+  }
 
-  const GlobalValue* Resolved = GA.resolveAliasedGlobal(/*stopOnWeak*/ false);
-  Assert1(Resolved,
-          "Aliasing chain should end with function or global variable", &GA);
+  const GlobalValue *AG = GA.getAliasedGlobal();
+  Assert1(AG, "Aliasing chain should end with function or global variable",
+          &GA);
 
   visitGlobalValue(GA);
 }
@@ -2099,7 +2102,7 @@ void Verifier::visitInstruction(Instruction &I) {
   MDNode *MD = I.getMetadata(LLVMContext::MD_range);
   Assert1(!MD || isa<LoadInst>(I), "Ranges are only for loads!", &I);
 
-  if (!DisableDebugInfoVerifier) {
+  if (VerifyDebugInfo) {
     MD = I.getMetadata(LLVMContext::MD_dbg);
     Finder.processLocation(*M, DILocation(MD));
   }
@@ -2172,18 +2175,41 @@ bool Verifier::VerifyIntrinsicType(Type *Ty,
     }
     llvm_unreachable("all argument kinds not covered");
 
-  case IITDescriptor::ExtendVecArgument:
+  case IITDescriptor::ExtendArgument: {
     // This may only be used when referring to a previous vector argument.
-    return D.getArgumentNumber() >= ArgTys.size() ||
-           !isa<VectorType>(ArgTys[D.getArgumentNumber()]) ||
-           VectorType::getExtendedElementVectorType(
-                       cast<VectorType>(ArgTys[D.getArgumentNumber()])) != Ty;
+    if (D.getArgumentNumber() >= ArgTys.size())
+      return true;
 
-  case IITDescriptor::TruncVecArgument:
+    Type *NewTy = ArgTys[D.getArgumentNumber()];
+    if (VectorType *VTy = dyn_cast<VectorType>(NewTy))
+      NewTy = VectorType::getExtendedElementVectorType(VTy);
+    else if (IntegerType *ITy = dyn_cast<IntegerType>(NewTy))
+      NewTy = IntegerType::get(ITy->getContext(), 2 * ITy->getBitWidth());
+    else
+      return true;
+
+    return Ty != NewTy;
+  }
+  case IITDescriptor::TruncArgument: {
+    // This may only be used when referring to a previous vector argument.
+    if (D.getArgumentNumber() >= ArgTys.size())
+      return true;
+
+    Type *NewTy = ArgTys[D.getArgumentNumber()];
+    if (VectorType *VTy = dyn_cast<VectorType>(NewTy))
+      NewTy = VectorType::getTruncatedElementVectorType(VTy);
+    else if (IntegerType *ITy = dyn_cast<IntegerType>(NewTy))
+      NewTy = IntegerType::get(ITy->getContext(), ITy->getBitWidth() / 2);
+    else
+      return true;
+
+    return Ty != NewTy;
+  }
+  case IITDescriptor::HalfVecArgument:
     // This may only be used when referring to a previous vector argument.
     return D.getArgumentNumber() >= ArgTys.size() ||
            !isa<VectorType>(ArgTys[D.getArgumentNumber()]) ||
-           VectorType::getTruncatedElementVectorType(
+           VectorType::getHalfElementsVectorType(
                          cast<VectorType>(ArgTys[D.getArgumentNumber()])) != Ty;
   }
   llvm_unreachable("unhandled");
@@ -2280,11 +2306,11 @@ void Verifier::visitIntrinsicFunctionCall(Intrinsic::ID ID, CallInst &CI) {
     MDNode *MD = cast<MDNode>(CI.getArgOperand(0));
     Assert1(MD->getNumOperands() == 1,
                 "invalid llvm.dbg.declare intrinsic call 2", &CI);
-    if (!DisableDebugInfoVerifier)
+    if (VerifyDebugInfo)
       Finder.processDeclare(*M, cast<DbgDeclareInst>(&CI));
   } break;
   case Intrinsic::dbg_value: { //llvm.dbg.value
-    if (!DisableDebugInfoVerifier) {
+    if (VerifyDebugInfo) {
       Assert1(CI.getArgOperand(0) && isa<MDNode>(CI.getArgOperand(0)),
               "invalid llvm.dbg.value intrinsic call 1", &CI);
       Finder.processValue(*M, cast<DbgValueInst>(&CI));
@@ -2354,23 +2380,22 @@ void Verifier::visitIntrinsicFunctionCall(Intrinsic::ID ID, CallInst &CI) {
 
 void Verifier::verifyDebugInfo() {
   // Verify Debug Info.
-  if (!DisableDebugInfoVerifier) {
-    for (DebugInfoFinder::iterator I = Finder.compile_unit_begin(),
-         E = Finder.compile_unit_end(); I != E; ++I)
-      Assert1(DICompileUnit(*I).Verify(), "DICompileUnit does not Verify!", *I);
-    for (DebugInfoFinder::iterator I = Finder.subprogram_begin(),
-         E = Finder.subprogram_end(); I != E; ++I)
-      Assert1(DISubprogram(*I).Verify(), "DISubprogram does not Verify!", *I);
-    for (DebugInfoFinder::iterator I = Finder.global_variable_begin(),
-         E = Finder.global_variable_end(); I != E; ++I)
-      Assert1(DIGlobalVariable(*I).Verify(),
-              "DIGlobalVariable does not Verify!", *I);
-    for (DebugInfoFinder::iterator I = Finder.type_begin(),
-         E = Finder.type_end(); I != E; ++I)
-      Assert1(DIType(*I).Verify(), "DIType does not Verify!", *I);
-    for (DebugInfoFinder::iterator I = Finder.scope_begin(),
-         E = Finder.scope_end(); I != E; ++I)
-      Assert1(DIScope(*I).Verify(), "DIScope does not Verify!", *I);
+  if (VerifyDebugInfo) {
+    for (DICompileUnit CU : Finder.compile_units()) {
+      Assert1(CU.Verify(), "DICompileUnit does not Verify!", CU);
+    }
+    for (DISubprogram S : Finder.subprograms()) {
+      Assert1(S.Verify(), "DISubprogram does not Verify!", S);
+    }
+    for (DIGlobalVariable GV : Finder.global_variables()) {
+      Assert1(GV.Verify(), "DIGlobalVariable does not Verify!", GV);
+    }
+    for (DIType T : Finder.types()) {
+      Assert1(T.Verify(), "DIType does not Verify!", T);
+    }
+    for (DIScope S : Finder.scopes()) {
+      Assert1(S.Verify(), "DIScope does not Verify!", S);
+    }
   }
 }
 

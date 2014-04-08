@@ -180,6 +180,29 @@ TEST_F(CloneInstruction, Attributes) {
   delete F2;
 }
 
+TEST_F(CloneInstruction, CallingConvention) {
+  Type *ArgTy1[] = { Type::getInt32PtrTy(context) };
+  FunctionType *FT1 =  FunctionType::get(Type::getVoidTy(context), ArgTy1, false);
+
+  Function *F1 = Function::Create(FT1, Function::ExternalLinkage);
+  F1->setCallingConv(CallingConv::Cold);
+  BasicBlock *BB = BasicBlock::Create(context, "", F1);
+  IRBuilder<> Builder(BB);
+  Builder.CreateRetVoid();
+
+  Function *F2 = Function::Create(FT1, Function::ExternalLinkage);
+
+  SmallVector<ReturnInst*, 4> Returns;
+  ValueToValueMapTy VMap;
+  VMap[F1->arg_begin()] = F2->arg_begin();
+
+  CloneFunctionInto(F2, F1, VMap, false, Returns);
+  EXPECT_EQ(CallingConv::Cold, F2->getCallingConv());
+
+  delete F1;
+  delete F2;
+}
+
 class CloneFunc : public ::testing::Test {
 protected:
   virtual void SetUp() {
@@ -276,7 +299,7 @@ TEST_F(CloneFunc, Subprogram) {
   unsigned SubprogramCount = Finder->subprogram_count();
   EXPECT_EQ(2U, SubprogramCount);
 
-  DebugInfoFinder::iterator Iter = Finder->subprogram_begin();
+  auto Iter = Finder->subprograms().begin();
   DISubprogram Sub1(*Iter);
   EXPECT_TRUE(Sub1.Verify());
   Iter++;
@@ -292,7 +315,7 @@ TEST_F(CloneFunc, Subprogram) {
 TEST_F(CloneFunc, SubprogramInRightCU) {
   EXPECT_EQ(2U, Finder->compile_unit_count());
 
-  DebugInfoFinder::iterator Iter = Finder->compile_unit_begin();
+  auto Iter = Finder->compile_units().begin();
   DICompileUnit CU1(*Iter);
   EXPECT_TRUE(CU1.Verify());
   Iter++;

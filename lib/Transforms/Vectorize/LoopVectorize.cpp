@@ -67,6 +67,7 @@
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
@@ -84,6 +85,7 @@
 #include "llvm/Support/BranchProbability.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetLibraryInfo.h"
 #include "llvm/Transforms/Scalar.h"
@@ -468,6 +470,28 @@ static void setDebugLocFromInst(IRBuilder<> &B, const Value *Ptr) {
   else
     B.SetCurrentDebugLocation(DebugLoc());
 }
+
+#ifndef NDEBUG
+/// \return string containing a file name and a line # for the given
+/// instruction.
+static format_object3<const char *, const char *, unsigned>
+getDebugLocString(const Instruction *I) {
+  if (!I)
+    return format<const char *, const char *, unsigned>("", "", "", 0U);
+  MDNode *N = I->getMetadata("dbg");
+  if (!N) {
+    const StringRef ModuleName =
+        I->getParent()->getParent()->getParent()->getModuleIdentifier();
+    return format<const char *, const char *, unsigned>("%s", ModuleName.data(),
+                                                        "", 0U);
+  }
+  const DILocation Loc(N);
+  const unsigned LineNo = Loc.getLineNumber();
+  const char *DirName = Loc.getDirectory().data();
+  const char *FileName = Loc.getFilename().data();
+  return format("%s/%s:%u", DirName, FileName, LineNo);
+}
+#endif
 
 /// LoopVectorizationLegality checks if it is legal to vectorize a loop, and
 /// to what vectorization factor.
@@ -989,12 +1013,12 @@ private:
   }
 };
 
-static void addInnerLoop(Loop *L, SmallVectorImpl<Loop *> &V) {
-  if (L->empty())
-    return V.push_back(L);
+static void addInnerLoop(Loop &L, SmallVectorImpl<Loop *> &V) {
+  if (L.empty())
+    return V.push_back(&L);
 
-  for (Loop::iterator I = L->begin(), E = L->end(); I != E; ++I)
-    addInnerLoop(*I, V);
+  for (Loop *InnerL : L)
+    addInnerLoop(*InnerL, V);
 }
 
 /// The LoopVectorize Pass.
@@ -1051,8 +1075,8 @@ struct LoopVectorize : public FunctionPass {
     // and can invalidate iterators across the loops.
     SmallVector<Loop *, 8> Worklist;
 
-    for (LoopInfo::iterator I = LI->begin(), E = LI->end(); I != E; ++I)
-      addInnerLoop(*I, Worklist);
+    for (Loop *L : *LI)
+      addInnerLoop(*L, Worklist);
 
     // Now walk the identified inner loops.
     bool Changed = false;
@@ -1064,16 +1088,11 @@ struct LoopVectorize : public FunctionPass {
   }
 
   bool processLoop(Loop *L) {
-    // We only handle inner loops, so if there are children just recurse.
-    if (!L->empty()) {
-      bool Changed = false;
-      for (Loop::iterator I = L->begin(), E = L->begin(); I != E; ++I)
-        Changed |= processLoop(*I);
-      return Changed;
-    }
-
-    DEBUG(dbgs() << "LV: Checking a loop in \"" <<
-          L->getHeader()->getParent()->getName() << "\"\n");
+    assert(L->empty() && "Only process inner loops.");
+    DEBUG(dbgs() << "LV: Checking a loop in \""
+                 << L->getHeader()->getParent()->getName() << "\" from "
+                 << getDebugLocString(L->getHeader()->getFirstNonPHIOrDbg())
+                 << "\n");
 
     LoopVectorizeHints Hints(L, DisableUnrolling);
 
@@ -1136,8 +1155,10 @@ struct LoopVectorize : public FunctionPass {
     unsigned UF = CM.selectUnrollFactor(OptForSize, Hints.Unroll, VF.Width,
                                         VF.Cost);
 
-    DEBUG(dbgs() << "LV: Found a vectorizable loop ("<< VF.Width << ") in "<<
-          F->getParent()->getModuleIdentifier() << '\n');
+    DEBUG(dbgs() << "LV: Found a vectorizable loop ("
+                 << VF.Width << ") in "
+                 << getDebugLocString(L->getHeader()->getFirstNonPHIOrDbg())
+                 << '\n');
     DEBUG(dbgs() << "LV: Unroll Factor is " << UF << '\n');
 
     if (VF.Width == 1) {
@@ -3662,6 +3683,16 @@ void LoopVectorizationLegality::collectLoopUniforms() {
 
   // Start with the conditional branch and walk up the block.
   Worklist.push_back(Latch->getTerminator()->getOperand(0));
+
+  // Also add all consecutive pointer values; these values will be uniform
+  // after vectorization (and subsequent cleanup) and, until revectorization is
+  // supported, all dependencies must also be uniform.
+  for (Loop::block_iterator B = TheLoop->block_begin(),
+       BE = TheLoop->block_end(); B != BE; ++B)
+    for (BasicBlock::iterator I = (*B)->begin(), IE = (*B)->end();
+         I != IE; ++I)
+      if (I->getType()->isPointerTy() && isConsecutivePtr(I))
+        Worklist.insert(Worklist.end(), I->op_begin(), I->op_end());
 
   while (Worklist.size()) {
     Instruction *I = dyn_cast<Instruction>(Worklist.back());

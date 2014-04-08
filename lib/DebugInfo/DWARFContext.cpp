@@ -96,6 +96,11 @@ void DWARFContext::dump(raw_ostream &OS, DIDumpType DumpType) {
     getDebugLoc()->dump(OS);
   }
 
+  if (DumpType == DIDT_All || DumpType == DIDT_LocDwo) {
+    OS << "\n.debug_loc.dwo contents:\n";
+    getDebugLocDWO()->dump(OS);
+  }
+
   if (DumpType == DIDT_All || DumpType == DIDT_Frames) {
     OS << "\n.debug_frame contents:\n";
     getDebugFrame()->dump(OS);
@@ -235,6 +240,16 @@ const DWARFDebugLoc *DWARFContext::getDebugLoc() {
   if (getNumCompileUnits())
     Loc->parse(LocData, getCompileUnitAtIndex(0)->getAddressByteSize());
   return Loc.get();
+}
+
+const DWARFDebugLocDWO *DWARFContext::getDebugLocDWO() {
+  if (LocDWO)
+    return LocDWO.get();
+
+  DataExtractor LocData(getLocDWOSection().Data, isLittleEndian(), 0);
+  LocDWO.reset(new DWARFDebugLocDWO());
+  LocDWO->parse(LocData);
+  return LocDWO.get();
 }
 
 const DWARFDebugAranges *DWARFContext::getDebugAranges() {
@@ -622,14 +637,15 @@ DWARFContextInMemory::DWARFContextInMemory(object::ObjectFile *Obj)
       if (!zlib::isAvailable() ||
           !consumeCompressedDebugSectionHeader(data, OriginalSize))
         continue;
-      std::unique_ptr<MemoryBuffer> UncompressedSection;
-      if (zlib::uncompress(data, UncompressedSection, OriginalSize) !=
-          zlib::StatusOK)
+      UncompressedSections.resize(UncompressedSections.size() + 1);
+      if (zlib::uncompress(data, UncompressedSections.back(), OriginalSize) !=
+          zlib::StatusOK) {
+        UncompressedSections.pop_back();
         continue;
+      }
       // Make data point to uncompressed section contents and save its contents.
       name = name.substr(1);
-      data = UncompressedSection->getBuffer();
-      UncompressedSections.push_back(std::move(UncompressedSection));
+      data = UncompressedSections.back();
     }
 
     StringRef *SectionData =
@@ -648,6 +664,7 @@ DWARFContextInMemory::DWARFContextInMemory(object::ObjectFile *Obj)
             .Case("debug_gnu_pubtypes", &GnuPubTypesSection)
             .Case("debug_info.dwo", &InfoDWOSection.Data)
             .Case("debug_abbrev.dwo", &AbbrevDWOSection)
+            .Case("debug_loc.dwo", &LocDWOSection.Data)
             .Case("debug_line.dwo", &LineDWOSection.Data)
             .Case("debug_str.dwo", &StringDWOSection)
             .Case("debug_str_offsets.dwo", &StringOffsetDWOSection)
@@ -699,26 +716,24 @@ DWARFContextInMemory::DWARFContextInMemory(object::ObjectFile *Obj)
     if (Section.relocation_begin() != Section.relocation_end()) {
       uint64_t SectionSize;
       RelocatedSection->getSize(SectionSize);
-      for (object::relocation_iterator reloc_i = Section.relocation_begin(),
-                                       reloc_e = Section.relocation_end();
-           reloc_i != reloc_e; ++reloc_i) {
+      for (const RelocationRef &Reloc : Section.relocations()) {
         uint64_t Address;
-        reloc_i->getOffset(Address);
+        Reloc.getOffset(Address);
         uint64_t Type;
-        reloc_i->getType(Type);
+        Reloc.getType(Type);
         uint64_t SymAddr = 0;
         // ELF relocations may need the symbol address
         if (Obj->isELF()) {
-          object::symbol_iterator Sym = reloc_i->getSymbol();
+          object::symbol_iterator Sym = Reloc.getSymbol();
           Sym->getAddress(SymAddr);
         }
 
         object::RelocVisitor V(Obj->getFileFormatName());
         // The section address is always 0 for debug sections.
-        object::RelocToApply R(V.visit(Type, *reloc_i, 0, SymAddr));
+        object::RelocToApply R(V.visit(Type, Reloc, 0, SymAddr));
         if (V.error()) {
           SmallString<32> Name;
-          error_code ec(reloc_i->getTypeName(Name));
+          error_code ec(Reloc.getTypeName(Name));
           if (ec) {
             errs() << "Aaaaaa! Nameless relocation! Aaaaaa!\n";
           }

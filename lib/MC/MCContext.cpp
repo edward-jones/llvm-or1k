@@ -37,13 +37,13 @@ typedef std::map<SectionGroupPair, const MCSectionCOFF *> COFFUniqueMapTy;
 
 MCContext::MCContext(const MCAsmInfo *mai, const MCRegisterInfo *mri,
                      const MCObjectFileInfo *mofi, const SourceMgr *mgr,
-                     bool DoAutoReset) :
-  SrcMgr(mgr), MAI(mai), MRI(mri), MOFI(mofi),
-  Allocator(), Symbols(Allocator), UsedNames(Allocator),
-  NextUniqueID(0),
-  CurrentDwarfLoc(0,0,0,DWARF2_FLAG_IS_STMT,0,0),
-  DwarfLocSeen(false), GenDwarfForAssembly(false), GenDwarfFileNumber(0),
-  AllowTemporaryLabels(true), DwarfCompileUnitID(0), AutoReset(DoAutoReset) {
+                     bool DoAutoReset)
+    : SrcMgr(mgr), MAI(mai), MRI(mri), MOFI(mofi), Allocator(),
+      Symbols(Allocator), UsedNames(Allocator), NextUniqueID(0),
+      CurrentDwarfLoc(0, 0, 0, DWARF2_FLAG_IS_STMT, 0, 0), DwarfLocSeen(false),
+      GenDwarfForAssembly(false), GenDwarfFileNumber(0),
+      AllowTemporaryLabels(true), DwarfCompileUnitID(0),
+      AutoReset(DoAutoReset) {
 
   error_code EC = llvm::sys::fs::current_path(CompilationDir);
   if (EC)
@@ -59,8 +59,6 @@ MCContext::MCContext(const MCAsmInfo *mai, const MCRegisterInfo *mri,
 
   if (SrcMgr && SrcMgr->getNumBuffers() > 0)
     MainFileName = SrcMgr->getMemoryBuffer(0)->getBufferIdentifier();
-  else
-    MainFileName = "";
 }
 
 MCContext::~MCContext() {
@@ -153,6 +151,13 @@ MCSymbol *MCContext::CreateSymbol(StringRef Name) {
 MCSymbol *MCContext::GetOrCreateSymbol(const Twine &Name) {
   SmallString<128> NameSV;
   return GetOrCreateSymbol(Name.toStringRef(NameSV));
+}
+
+MCSymbol *MCContext::CreateLinkerPrivateTempSymbol() {
+  SmallString<128> NameSV;
+  raw_svector_ostream(NameSV)
+    << MAI->getLinkerPrivateGlobalPrefix() << "tmp" << NextUniqueID++;
+  return CreateSymbol(NameSV);
 }
 
 MCSymbol *MCContext::CreateTempSymbol() {
@@ -252,6 +257,11 @@ getELFSection(StringRef Section, unsigned Type, unsigned Flags,
   if (ELFUniquingMap == 0)
     ELFUniquingMap = new ELFUniqueMapTy();
   ELFUniqueMapTy &Map = *(ELFUniqueMapTy*)ELFUniquingMap;
+
+  SmallString<32> ZDebugName;
+  if (MAI->compressDebugSections() && Section.startswith(".debug_") &&
+      Section != ".debug_frame" && Section != ".debug_line")
+    Section = (".z" + Section.drop_front(1)).toStringRef(ZDebugName);
 
   // Do the lookup, if we have a hit, return it.
   std::pair<ELFUniqueMapTy::iterator, bool> Entry = Map.insert(
@@ -355,7 +365,7 @@ void MCContext::FatalError(SMLoc Loc, const Twine &Msg) {
   // If we have a source manager and a location, use it. Otherwise just
   // use the generic report_fatal_error().
   if (!SrcMgr || Loc == SMLoc())
-    report_fatal_error(Msg);
+    report_fatal_error(Msg, false);
 
   // Use the source manager to print the message.
   SrcMgr->PrintMessage(Loc, SourceMgr::DK_Error, Msg);

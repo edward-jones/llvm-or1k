@@ -35,7 +35,7 @@ class MCMachObjectSymbolizer : public MCObjectSymbolizer {
 
 public:
   MCMachObjectSymbolizer(MCContext &Ctx,
-                         std::unique_ptr<MCRelocationInfo> &RelInfo,
+                         std::unique_ptr<MCRelocationInfo> RelInfo,
                          const MachOObjectFile *MOOF);
 
   StringRef findExternalFunctionAt(uint64_t Addr) override;
@@ -46,10 +46,10 @@ public:
 } // End unnamed namespace
 
 MCMachObjectSymbolizer::MCMachObjectSymbolizer(
-    MCContext &Ctx, std::unique_ptr<MCRelocationInfo> &RelInfo,
+    MCContext &Ctx, std::unique_ptr<MCRelocationInfo> RelInfo,
     const MachOObjectFile *MOOF)
-    : MCObjectSymbolizer(Ctx, RelInfo, MOOF), MOOF(MOOF), StubsStart(0),
-      StubsCount(0), StubSize(0), StubsIndSymIndex(0) {
+  : MCObjectSymbolizer(Ctx, std::move(RelInfo), MOOF), MOOF(MOOF),
+    StubsStart(0), StubsCount(0), StubSize(0), StubsIndSymIndex(0) {
 
   for (const SectionRef &Section : MOOF->sections()) {
     StringRef Name;
@@ -121,9 +121,10 @@ tryAddingPcLoadReferenceComment(raw_ostream &cStream, int64_t Value,
 //===- MCObjectSymbolizer -------------------------------------------------===//
 
 MCObjectSymbolizer::MCObjectSymbolizer(
-    MCContext &Ctx, std::unique_ptr<MCRelocationInfo> &RelInfo,
-    const ObjectFile *Obj)
-    : MCSymbolizer(Ctx, RelInfo), Obj(Obj), SortedSections(), AddrToReloc() {}
+  MCContext &Ctx, std::unique_ptr<MCRelocationInfo> RelInfo,
+  const ObjectFile *Obj)
+  : MCSymbolizer(Ctx, std::move(RelInfo)), Obj(Obj), SortedSections(),
+    AddrToReloc() {}
 
 bool MCObjectSymbolizer::
 tryAddingSymbolicOperand(MCInst &MI, raw_ostream &cStream,
@@ -153,14 +154,17 @@ tryAddingSymbolicOperand(MCInst &MI, raw_ostream &cStream,
     return false;
   uint64_t UValue = Value;
   // FIXME: map instead of looping each time?
-  for (symbol_iterator SI = Obj->symbol_begin(), SE = Obj->symbol_end();
-       SI != SE; ++SI) {
-    uint64_t SymAddr; SI->getAddress(SymAddr);
-    uint64_t SymSize; SI->getSize(SymSize);
-    StringRef SymName; SI->getName(SymName);
-    SymbolRef::Type SymType; SI->getType(SymType);
-    if (SymAddr == UnknownAddressOrSize || SymSize == UnknownAddressOrSize
-        || SymName.empty() || SymType != SymbolRef::ST_Function)
+  for (const SymbolRef &Symbol : Obj->symbols()) {
+    uint64_t SymAddr;
+    Symbol.getAddress(SymAddr);
+    uint64_t SymSize;
+    Symbol.getSize(SymSize);
+    StringRef SymName;
+    Symbol.getName(SymName);
+    SymbolRef::Type SymType;
+    Symbol.getType(SymType);
+    if (SymAddr == UnknownAddressOrSize || SymSize == UnknownAddressOrSize ||
+        SymName.empty() || SymType != SymbolRef::ST_Function)
       continue;
 
     if ( SymAddr == UValue ||
@@ -188,11 +192,11 @@ StringRef MCObjectSymbolizer::findExternalFunctionAt(uint64_t Addr) {
 }
 
 MCObjectSymbolizer *MCObjectSymbolizer::createObjectSymbolizer(
-    MCContext &Ctx, std::unique_ptr<MCRelocationInfo> &RelInfo,
+    MCContext &Ctx, std::unique_ptr<MCRelocationInfo> RelInfo,
     const ObjectFile *Obj) {
   if (const MachOObjectFile *MOOF = dyn_cast<MachOObjectFile>(Obj))
-    return new MCMachObjectSymbolizer(Ctx, RelInfo, MOOF);
-  return new MCObjectSymbolizer(Ctx, RelInfo, Obj);
+    return new MCMachObjectSymbolizer(Ctx, std::move(RelInfo), MOOF);
+  return new MCObjectSymbolizer(Ctx, std::move(RelInfo), Obj);
 }
 
 // SortedSections implementation.
@@ -253,42 +257,12 @@ void MCObjectSymbolizer::buildSectionList() {
 
 void MCObjectSymbolizer::buildRelocationByAddrMap() {
   for (const SectionRef &Section : Obj->sections()) {
-    section_iterator RelSecI = Section.getRelocatedSection();
-    if (RelSecI == Obj->section_end())
-      continue;
-
-    uint64_t StartAddr; RelSecI->getAddress(StartAddr);
-    uint64_t Size; RelSecI->getSize(Size);
-    bool RequiredForExec;
-    RelSecI->isRequiredForExecution(RequiredForExec);
-    if (RequiredForExec == false || Size == 0)
-      continue;
-    for (relocation_iterator RI = Section.relocation_begin(),
-                             RE = Section.relocation_end();
-         RI != RE; ++RI) {
-      // FIXME: libObject is inconsistent regarding error handling. The
-      // overwhelming majority of methods always return object_error::success,
-      // and assert for simple errors.. Here, ELFObjectFile::getRelocationOffset
-      // asserts when the file type isn't ET_REL.
-      // This workaround handles x86-64 elf, the only one that has a relocinfo.
-      uint64_t Offset;
-      if (Obj->isELF()) {
-        const ELF64LEObjectFile *ELFObj = dyn_cast<ELF64LEObjectFile>(Obj);
-        if (ELFObj == 0)
-          break;
-        if (ELFObj->getELFFile()->getHeader()->e_type == ELF::ET_REL) {
-          RI->getOffset(Offset);
-          Offset += StartAddr;
-        } else {
-          RI->getAddress(Offset);
-        }
-      } else {
-        RI->getOffset(Offset);
-        Offset += StartAddr;
-      }
+    for (const RelocationRef &Reloc : Section.relocations()) {
+      uint64_t Address;
+      Reloc.getAddress(Address);
       // At a specific address, only keep the first relocation.
-      if (AddrToReloc.find(Offset) == AddrToReloc.end())
-        AddrToReloc[Offset] = *RI;
+      if (AddrToReloc.find(Address) == AddrToReloc.end())
+        AddrToReloc[Address] = Reloc;
     }
   }
 }

@@ -193,6 +193,10 @@ namespace llvm {
     /// @name Symbol Management
     /// @{
 
+    /// CreateLinkerPrivateTempSymbol - Create and return a new linker temporary
+    /// symbol with a unique but unspecified name.
+    MCSymbol *CreateLinkerPrivateTempSymbol();
+
     /// CreateTempSymbol - Create and return a new assembler temporary symbol
     /// with a unique but unspecified name.
     MCSymbol *CreateTempSymbol();
@@ -292,21 +296,13 @@ namespace llvm {
     const std::string &getMainFileName() const { return MainFileName; }
 
     /// \brief Set the main file name and override the default.
-    void setMainFileName(StringRef S) { MainFileName = S.str(); }
+    void setMainFileName(StringRef S) { MainFileName = S; }
 
     /// GetDwarfFile - creates an entry in the dwarf file and directory tables.
     unsigned GetDwarfFile(StringRef Directory, StringRef FileName,
                           unsigned FileNumber, unsigned CUID);
 
     bool isValidDwarfFileNumber(unsigned FileNumber, unsigned CUID = 0);
-
-    bool hasDwarfFiles() const {
-      // Traverse MCDwarfFilesCUMap and check whether each entry is empty.
-      for (const auto &FileTable : MCDwarfLineTablesCUMap)
-        if (!FileTable.second.getMCDwarfFiles().empty())
-           return true;
-      return false;
-    }
 
     const std::map<unsigned, MCDwarfLineTable> &getMCDwarfLineTables() const {
       return MCDwarfLineTablesCUMap;
@@ -341,11 +337,8 @@ namespace llvm {
     void setDwarfCompileUnitID(unsigned CUIndex) {
       DwarfCompileUnitID = CUIndex;
     }
-    MCSymbol *getMCLineTableSymbol(unsigned ID) const {
-      return getMCDwarfLineTable(ID).getLabel();
-    }
-    void setMCLineTableSymbol(MCSymbol *Sym, unsigned ID) {
-      getMCDwarfLineTable(ID).setLabel(Sym);
+    void setMCLineTableCompilationDir(unsigned CUID, StringRef CompilationDir) {
+      getMCDwarfLineTable(CUID).setCompilationDir(CompilationDir);
     }
 
     /// setCurrentDwarfLoc - saves the information from the currently parsed
@@ -371,7 +364,9 @@ namespace llvm {
     bool getGenDwarfForAssembly() { return GenDwarfForAssembly; }
     void setGenDwarfForAssembly(bool Value) { GenDwarfForAssembly = Value; }
     unsigned getGenDwarfFileNumber() { return GenDwarfFileNumber; }
-    unsigned nextGenDwarfFileNumber() { return ++GenDwarfFileNumber; }
+    void setGenDwarfFileNumber(unsigned FileNumber) {
+      GenDwarfFileNumber = FileNumber;
+    }
     const MCSection *getGenDwarfSection() { return GenDwarfSection; }
     void setGenDwarfSection(const MCSection *Sec) { GenDwarfSection = Sec; }
     MCSymbol *getGenDwarfSectionStartSym() { return GenDwarfSectionStartSym; }
