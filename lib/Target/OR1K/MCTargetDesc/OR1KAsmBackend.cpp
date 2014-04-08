@@ -62,7 +62,7 @@ public:
   }
 
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value) const;
+                  uint64_t Value, bool IsPCRel) const;
 
   MCObjectWriter *createObjectWriter(raw_ostream &OS) const;
 
@@ -93,9 +93,10 @@ bool OR1KAsmBackend::writeNopData(uint64_t Count, MCObjectWriter *OW) const {
 }
 
 void OR1KAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
-                                unsigned DataSize, uint64_t Value) const {
+                                unsigned DataSize, uint64_t Value,
+                                bool IsPCRel) const {
   MCFixupKind Kind = Fixup.getKind();
-  Value = adjustFixupValue((unsigned)Kind, Value);
+  Value = adjustFixupValue(Kind, Value);
 
   if (!Value)
     return; // This value doesn't change the encoding
