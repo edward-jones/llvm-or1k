@@ -868,6 +868,8 @@ StringRef ELFObjectFile<ELFT>::getFileFormatName() const {
     case ELF::EM_SPARC:
     case ELF::EM_SPARC32PLUS:
       return "ELF32-sparc";
+    case ELF::EM_OPENRISC:
+      return "ELF32-openrisc";
     default:
       return "ELF32-unknown";
     }
