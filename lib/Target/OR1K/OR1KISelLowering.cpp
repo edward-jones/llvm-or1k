@@ -526,7 +526,7 @@ OR1KTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     Chain = DAG.getCopyToReg(Chain, dl, OR1K::R11, Val, Flag);
     Flag = Chain.getValue(1);
 
-    RetOps.push_back(DAG.getRegister(OR1K::R11, MVT::iPTR));
+    RetOps.push_back(DAG.getRegister(OR1K::R11, MVT::i32));
   }
 
   RetOps[0] = Chain;
