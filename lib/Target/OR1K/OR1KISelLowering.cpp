@@ -97,10 +97,6 @@ OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm) :
     setOperationAction(ISD::UMUL_LOHI,       MVT::i32, Expand);
     setOperationAction(ISD::SMUL_LOHI,       MVT::i32, Expand);
   }
-  setOperationAction(ISD::MULHU,             MVT::f32, Expand);
-  setOperationAction(ISD::MULHS,             MVT::f32, Expand);
-  setOperationAction(ISD::UMUL_LOHI,         MVT::f32, Expand);
-  setOperationAction(ISD::SMUL_LOHI,         MVT::f32, Expand);
 
   setOperationAction(ISD::SUBC, MVT::i32, Expand);
   setOperationAction(ISD::SUBE, MVT::i32, Expand);
