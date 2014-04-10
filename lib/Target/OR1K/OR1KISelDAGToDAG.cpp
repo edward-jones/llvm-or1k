@@ -85,9 +85,11 @@ private:
 
   SDNode *Select(SDNode *N);
 
-  SDNode* SelectFrameIndex(SDNode *Node);
-  SDNode* SelectMulHiLo(SDNode *Node, bool Signed);
-  SDNode* SelectMulHi(SDNode *Node, bool Signed);
+  SDNode *SelectFrameIndex(SDNode *Node);
+  SDNode *SelectMulHiLo(SDNode *Node, bool Signed);
+  SDNode *SelectMulHi(SDNode *Node, bool Signed);
+
+  SDValue getGlobalBaseReg();
 
   // Complex Pattern for address selection.
   bool SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset);
@@ -98,6 +100,12 @@ private:
   }
 };
 
+}
+
+SDValue OR1KDAGToDAGISel::getGlobalBaseReg() {
+  MachineFunction &MF = CurDAG->getMachineFunction();
+  unsigned GlobalBaseReg = TM.getInstrInfo()->getGlobalBaseReg(MF);
+  return CurDAG->getRegister(GlobalBaseReg, MVT::i32);
 }
 
 /// ComplexPattern used on OR1KInstrInfo
@@ -115,10 +123,8 @@ SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset) {
   if (TM.getRelocationModel() == Reloc::PIC_) {
     if ((Addr.getOpcode() == ISD::TargetGlobalAddress) ||
         (Addr.getOpcode() == ISD::TargetConstantPool) ||
-        (Addr.getOpcode() == ISD::TargetJumpTable)){
-      OR1KMachineFunctionInfo *MFI =
-        CurDAG->getMachineFunction().getInfo<OR1KMachineFunctionInfo>();
-      Base   = CurDAG->getRegister(MFI->getGlobalBaseReg(), MVT::i32);
+        (Addr.getOpcode() == ISD::TargetJumpTable)) {
+      Base   = getGlobalBaseReg();
       Offset = Addr;
       return true;
     }
@@ -204,11 +210,12 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
   // tablegen selection should be handled here.
   switch(Opcode) {
     default: break;
-    case ISD::FrameIndex:    return SelectFrameIndex(Node);
-    case ISD::MULHU:         return SelectMulHi(Node, false);
-    case ISD::MULHS:         return SelectMulHi(Node, true);
-    case ISD::UMUL_LOHI:     return SelectMulHiLo(Node, false);
-    case ISD::SMUL_LOHI:     return SelectMulHiLo(Node, true);
+    case ISD::FrameIndex: return SelectFrameIndex(Node);
+    case ISD::MULHU: return SelectMulHi(Node, false);
+    case ISD::MULHS: return SelectMulHi(Node, true);
+    case ISD::UMUL_LOHI: return SelectMulHiLo(Node, false);
+    case ISD::SMUL_LOHI: return SelectMulHiLo(Node, true);
+    case OR1KISD::GLOBAL_BASE_REG: return getGlobalBaseReg().getNode();
   }
 
   // Select the default instruction

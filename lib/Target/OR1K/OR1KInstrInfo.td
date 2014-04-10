@@ -69,9 +69,15 @@ def HI16 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant((uint64_t)N->getZExtValue() >> 16, MVT::i32);
 }]>;
 
+def JumpTargetAsmOperand : AsmOperandClass {
+  let Name = "JumpTarget";
+  let ParserMethod = "parseJumpTargetOperand";
+}
 
-def brtarget : Operand<OtherVT>;
-def calltarget : Operand<i32>;
+let ParserMatchClass = JumpTargetAsmOperand in {
+  def brtarget : Operand<OtherVT>;
+  def calltarget : Operand<iPTR>;
+}
 
 def s6imm    : Operand<i32>;
 
@@ -100,15 +106,21 @@ def i32hi16 : PatLeaf<(i32 imm), [{
   return ((N->getZExtValue() & 0xFFFF0000ULL) == N->getZExtValue());
 }], HI16>;
 
+def MemAsmOperand : AsmOperandClass {
+  let Name = "Mem";
+  let ParserMethod = "parseMemOperand";
+}
+
 // Addressing modes.
-def ADDRri : ComplexPattern<i32, 2, "SelectAddr", [frameindex], []>;
+def ADDRri : ComplexPattern<iPTR, 2, "SelectAddr", [frameindex], []>;
 
 // Address operands
-def MEMri : Operand<i32> {
+def MEMri : Operand<iPTR> {
   let PrintMethod = "printMemOperand";
   let EncoderMethod = "getMemoryOpValue";
   let DecoderMethod = "DecodeMemoryValue";
   let MIOperandInfo = (ops GPR, i32imm);
+  let ParserMatchClass = MemAsmOperand;
 }
 
 // Conditional code predicates - used for pattern matching for SF instructions
@@ -578,7 +590,6 @@ class NOP_I<bits<2> op2Val, string asmstr, InstrItinClass itin>
 let neverHasSideEffects = 1 in
   def NOP : NOP_I<0x1, "l.nop", II_NOP>;
 
-// FIXME: Do not use isCodeGenOnly = 1 to resolve conflicts
 let isReturn = 1, isTerminator = 1, hasDelaySlot=1, isBarrier = 1, Uses=[R9], Inst = 0x44004800 in {
   def RET : InstBR<0x1, (outs), (ins),
                    "l.jr\tr9",
@@ -618,10 +629,9 @@ let Uses = [SR], usesCustomInserter = 1, Predicates = [NoCmov] in {
 }
 
 
-// PIC base construction.
-let neverHasSideEffects = 1, isNotDuplicable = 1, Defs = [R9] in
-  def GETPC : Pseudo<(outs), (ins i32imm:$label),
-  "#GETPC $label", []>;
+let neverHasSideEffects = 1 in
+  def GET_GLOBAL_BASE : Pseudo<(outs GPR:$gp), (ins),
+                               "#GET_GLOBAL_BASE $gp", []>;
 
 class MOVHI_I <dag outs, dag ins, list<dag> pattern, InstrItinClass itin>
   : InstOR1K<outs, ins,  "l.movhi\t$rD, $imm", pattern, itin> {

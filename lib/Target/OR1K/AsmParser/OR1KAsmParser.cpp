@@ -7,57 +7,64 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "MCTargetDesc/OR1KMCExpr.h"
 #include "MCTargetDesc/OR1KMCTargetDesc.h"
-#include "llvm/MC/MCParser/MCAsmLexer.h"
-#include "llvm/MC/MCParser/MCParsedAsmOperand.h"
-#include "llvm/MC/MCTargetAsmParser.h"
-#include "llvm/MC/MCStreamer.h"
-#include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCParser/MCAsmLexer.h"
+#include "llvm/MC/MCParser/MCParsedAsmOperand.h"
+#include "llvm/MC/MCStreamer.h"
+#include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCTargetAsmParser.h"
 #include "llvm/Support/TargetRegistry.h"
-#include "llvm/ADT/STLExtras.h"
+
 using namespace llvm;
 
 namespace {
 class OR1KOperand;
 
 class OR1KAsmParser : public MCTargetAsmParser {
-  MCAsmParser &Parser;
-  MCAsmParser &getParser() const { return Parser; }
-  MCAsmLexer &getLexer() const { return Parser.getLexer(); }
-  MCSubtargetInfo &STI;
-
-  bool MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
-                               SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                               MCStreamer &Out, unsigned &ErrorInfo,
-                               bool MatchingInlineAsm);
-
-  bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc);
-
-  OR1KOperand *ParseRegister(unsigned &RegNo);
-
-  OR1KOperand *ParseImmediate();
-
-  bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
-                        SMLoc NameLoc,
-                        SmallVectorImpl<MCParsedAsmOperand*> &Operands);
-
-  bool ParseDirective(AsmToken DirectiveID);
-
-  bool ParseOperand(SmallVectorImpl<MCParsedAsmOperand*> &Operands);
-
-  // Auto-generated instruction matching functions
-#define GET_ASSEMBLER_HEADER
-#include "OR1KGenAsmMatcher.inc"
+public:
+  typedef SmallVectorImpl<MCParsedAsmOperand*> ParsedOperandsVector;
 
 public:
-  OR1KAsmParser(MCSubtargetInfo &sti, MCAsmParser &_Parser,
-                const MCInstrInfo &MII)
-    : MCTargetAsmParser(), Parser(_Parser), STI(sti) {
-      setAvailableFeatures(ComputeAvailableFeatures(STI.getFeatureBits()));
+  OR1KAsmParser(MCSubtargetInfo &STI, MCAsmParser &P, const MCInstrInfo &MII)
+   : STI(STI) {
+    setAvailableFeatures(ComputeAvailableFeatures(STI.getFeatureBits()));
   }
 
+  bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc) override;
+  bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
+                        SMLoc NameLoc, ParsedOperandsVector &Operands) override;
+
+  bool ParseDirective(AsmToken DirectiveID) override;
+
+  bool MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
+                               ParsedOperandsVector &Operands,
+                               MCStreamer &Out, unsigned &ErrorInfo,
+                               bool MatchingInlineAsm) override;
+
+  #define GET_ASSEMBLER_HEADER
+  #include "OR1KGenAsmMatcher.inc"
+
+private:
+  bool parseOperand(ParsedOperandsVector &Operands, StringRef Name);
+  OperandMatchResultTy parseMemOperand(ParsedOperandsVector &Operands);
+  OperandMatchResultTy parseJumpTargetOperand(ParsedOperandsVector &Operands);
+
+  OperandMatchResultTy parseRegister(ParsedOperandsVector &Operands,
+                                     StringRef Name);
+  OperandMatchResultTy parseImmediate(ParsedOperandsVector &Operands,
+                                      StringRef Name);
+
+  bool matchImmediate(const MCExpr *&Expr, SMLoc &EndLoc);
+  bool matchJumpTarget(const MCExpr *&Expr, SMLoc &EndLoc);
+
+private:
+  MCSubtargetInfo &STI;
 };
 
 /// OR1KOperand - Instances of this class represented a parsed machine
@@ -68,87 +75,61 @@ public:
     Token,
     Register,
     Immediate,
-    Memory
-  } Kind;
+    Memory,
+    JumpTarget
+  };
 
-  SMLoc StartLoc, EndLoc;
+private:
+  struct MemAddr {
+    unsigned BaseReg;
+    const MCExpr *Offset;
+  };
 
-  union {
-    struct {
-      const char *Data;
-      unsigned Length;
-    } Tok;
-    struct {
-      unsigned RegNum;
-    } Reg;
-    struct {
-      const MCExpr *Val;
-    } Imm;
+  union ValueTy {
+    unsigned Reg;
+    const MCExpr *Imm;
+    MemAddr Mem;
+    StringRef Tok;
 
-    struct {
-      unsigned BaseReg;
-      const MCExpr *Off;
-    } Mem;
-  } Op;
+    ValueTy() {}
+  };
 
-  OR1KOperand(KindTy K) : MCParsedAsmOperand(), Kind(K) {}
 public:
-  OR1KOperand(const OR1KOperand &o) : MCParsedAsmOperand() {
-    Kind = o.Kind;
-    StartLoc = o.StartLoc;
-    EndLoc = o.EndLoc;
-    switch (Kind) {
-      case Register:
-        Op.Reg = o.Op.Reg;
-        break;
-      case Immediate:
-        Op.Imm = o.Op.Imm;
-        break;
-      case Token:
-        Op.Tok = o.Op.Tok;
-        break;
-      case Memory:
-        Op.Mem = o.Op.Mem;
-        break;
-    }
-  }
+  SMLoc getStartLoc() const override { return StartLoc; }
+  SMLoc getEndLoc() const override { return EndLoc; }
 
-  /// getStartLoc - Gets location of the first token of this operand
-  SMLoc getStartLoc() const { return StartLoc; }
+  bool isReg() const override { return Kind == Register; }
+  bool isImm() const override { return Kind == Immediate; }
+  bool isToken() const override { return Kind == Token; }
+  bool isMem() const override { return Kind == Memory; }
+  bool isJumpTarget() const { return Kind == JumpTarget; }
 
-  /// getEndLoc - Gets location of the last token of this operand
-  SMLoc getEndLoc() const { return EndLoc; }
-
-  unsigned getReg() const {
+  unsigned getReg() const override {
     assert(Kind == Register && "Invalid type access!");
-    return Op.Reg.RegNum;
+    return Value.Reg;
   }
 
   const MCExpr *getImm() const {
-    assert (Kind == Immediate && "Invalid type access!");
-    return Op.Imm.Val;
+    assert(Kind == Immediate && "Invalid type access!");
+    return Value.Imm;
   }
 
   StringRef getToken() const {
-    assert (Kind == Token && "Invalid type access!");
-    return StringRef(Op.Tok.Data, Op.Tok.Length);
+    assert(Kind == Token && "Invalid type access!");
+    return Value.Tok;
   }
 
-  // Functions for testing operand type
-  bool isReg() const { return Kind == Register; }
-  bool isImm() const { return Kind == Immediate; }
-  bool isToken() const { return Kind == Token; }
-  bool isMem() const { return Kind == Memory; }
-
-  void addExpr(MCInst &Inst, const MCExpr *Expr) const {
-    // Add as immediates where possible. Null MCExpr = 0
-    if (Expr == 0)
-      Inst.addOperand(MCOperand::CreateImm(0));
-    else if (const MCConstantExpr *CE = dyn_cast<MCConstantExpr>(Expr))
-      Inst.addOperand(MCOperand::CreateImm(CE->getValue()));
-    else
-      Inst.addOperand(MCOperand::CreateExpr(Expr));
+  MemAddr getMem() const {
+    assert(Kind == Memory && "Invalid type access!");
+    return Value.Mem;
   }
+
+  const MCExpr *getJumpTarget() const {
+    assert(Kind == JumpTarget && "Invalid type access!");
+    return Value.Imm;
+  }
+
+  void print(raw_ostream &OS) const override {}
 
   void addRegOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
@@ -157,216 +138,427 @@ public:
 
   void addImmOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
-    addExpr(Inst, getImm());
+    const MCExpr *E = getImm();
+
+    int64_t Value;
+    if (E->EvaluateAsAbsolute(Value))
+      Inst.addOperand(MCOperand::CreateImm(Value));
+    else
+      Inst.addOperand(MCOperand::CreateExpr(E));
   }
 
-  // FIXME: Implement this
-  void print(raw_ostream &OS) const {}
+  void addMemOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 2 && "Invalid number of operands!");
+    MemAddr Mem = getMem();
+    
+    Inst.addOperand(MCOperand::CreateReg(Mem.BaseReg));
 
+    int64_t OffsetValue;
+    if (Mem.Offset->EvaluateAsAbsolute(OffsetValue))
+      Inst.addOperand(MCOperand::CreateImm(OffsetValue));
+    else
+      Inst.addOperand(MCOperand::CreateExpr(Mem.Offset));
+  }
 
-  static OR1KOperand *CreateToken(StringRef Str, SMLoc S) {
+  void addJumpTargetOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+    const MCExpr *E = getJumpTarget();
+
+    int64_t Value;
+    if (E->EvaluateAsAbsolute(Value))
+      Inst.addOperand(MCOperand::CreateImm(Value));
+    else
+      Inst.addOperand(MCOperand::CreateExpr(E));
+  }
+
+public:
+  static OR1KOperand *CreateToken(StringRef Value, SMLoc StartLoc,
+                                  SMLoc EndLoc) {
     OR1KOperand *Op = new OR1KOperand(Token);
-    Op->Op.Tok.Data = Str.data();
-    Op->Op.Tok.Length = Str.size();
-    Op->StartLoc = S;
-    Op->EndLoc = S;
+    Op->Value.Tok = Value;
+    Op->StartLoc = StartLoc;
+    Op->EndLoc = EndLoc;
     return Op;
   }
 
-  static OR1KOperand *CreateReg(unsigned RegNo, SMLoc S, SMLoc E) {
+  static OR1KOperand *CreateReg(unsigned Reg, SMLoc StartLoc,
+                                SMLoc EndLoc) {
     OR1KOperand *Op = new OR1KOperand(Register);
-    Op->Op.Reg.RegNum = RegNo;
-    Op->StartLoc = S;
-    Op->EndLoc = E;
+    Op->Value.Reg = Reg;
+    Op->StartLoc = StartLoc;
+    Op->EndLoc = EndLoc;
     return Op;
   }
-  
-  static OR1KOperand *CreateImm(const MCExpr *Val, SMLoc S, SMLoc E) {
+
+  static OR1KOperand *CreateImm(const MCExpr *Exp, SMLoc StartLoc,
+                                SMLoc EndLoc) {
     OR1KOperand *Op = new OR1KOperand(Immediate);
-    Op->Op.Imm.Val = Val;
-    Op->StartLoc = S;
-    Op->EndLoc = E;
+    Op->Value.Imm = Exp;
+    Op->StartLoc = StartLoc;
+    Op->EndLoc = EndLoc;
     return Op;
   }
+
+  static OR1KOperand *CreateMem(unsigned BaseReg, const MCExpr *Offset,
+                                SMLoc StartLoc, SMLoc EndLoc) {
+    OR1KOperand *Op = new OR1KOperand(Memory);
+    Op->Value.Mem.BaseReg = BaseReg;
+    Op->Value.Mem.Offset = Offset;
+    Op->StartLoc = StartLoc;
+    Op->EndLoc = EndLoc;
+    return Op;
+  }
+
+  static OR1KOperand *CreateJumpTarget(const MCExpr *Exp, SMLoc StartLoc,
+                                        SMLoc EndLoc) {
+    OR1KOperand *Op = new OR1KOperand(JumpTarget);
+    Op->Value.Imm = Exp;
+    Op->StartLoc = StartLoc;
+    Op->EndLoc = EndLoc;
+    return Op;
+  }
+
+private:
+  OR1KOperand(KindTy K) : Kind(K) {}
+
+private:
+  KindTy Kind;
+  ValueTy Value;
+  SMLoc StartLoc, EndLoc;
 };
+
 } // end anonymous namespace.
 
-// Auto-generated by TableGen
-static unsigned MatchRegisterName(StringRef Name);
+#define GET_REGISTER_MATCHER
+#define GET_MATCHER_IMPLEMENTATION
+#include "OR1KGenAsmMatcher.inc"
 
-bool OR1KAsmParser::
-MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
-                        SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                        MCStreamer &Out, unsigned &ErrorInfo,
-                        bool MatchingInlineAsm) {
-  MCInst Inst;
-  SMLoc ErrorLoc;
-
-  switch (MatchInstructionImpl(Operands, Inst, ErrorInfo, MatchingInlineAsm)) {
-    default: break;
-    case Match_Success:
-      Out.EmitInstruction(Inst, STI);
-      return false;
-    case Match_MissingFeature:
-      return Error(IDLoc, "Instruction use requires option to be enabled");
-    case Match_MnemonicFail:
-      return Error(IDLoc, "Unrecognized instruction mnemonic");
-    case Match_InvalidOperand:
-      ErrorLoc = IDLoc;
-      if (ErrorInfo != ~0U) {
-        if (ErrorInfo >= Operands.size())
-          return Error(IDLoc, "Too few operands for instruction");
-
-        ErrorLoc = ((OR1KOperand*)Operands[ErrorInfo])->getStartLoc();
-        if (ErrorLoc == SMLoc())
-          ErrorLoc = IDLoc;
-      }
-      return Error(IDLoc, "Invalid operand for instruction");
-  }
-
-  llvm_unreachable("Unknown match type detected!");
-}
-
-bool OR1KAsmParser::
-ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc) {
-  return (ParseRegister(RegNo) == 0);
-}
-
-OR1KOperand *OR1KAsmParser::ParseRegister(unsigned &RegNo) {
-  SMLoc S = Parser.getTok().getLoc();
-  SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() -1);
-
-  switch(getLexer().getKind()) {
-    default: return 0;
-    case AsmToken::Identifier:
-      RegNo = MatchRegisterName(getLexer().getTok().getIdentifier());
-      if (RegNo == 0)
-        return 0;
-      getLexer().Lex();
-      return OR1KOperand::CreateReg(RegNo, S, E);
-  }
-  return 0;
-}
-
-OR1KOperand *OR1KAsmParser::ParseImmediate() {
-  SMLoc S = Parser.getTok().getLoc();
-  SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() -1);
-
-  const MCExpr *EVal;
-  switch(getLexer().getKind()) {
-    default: return 0;
-    case AsmToken::Plus:
-    case AsmToken::Minus:
-    case AsmToken::Integer:
-      if(getParser().parseExpression(EVal))
-        return 0;
-
-      int64_t ans;
-      EVal->EvaluateAsAbsolute(ans);
-      return OR1KOperand::CreateImm(EVal, S, E);
-  }
-}
-
-/// Looks at a token type and creates the relevant operand
-/// from this information, adding to Operands.
-/// If operand was parsed, returns false, else true.
-/// FIXME: Replace with memory operand parsing?
-bool OR1KAsmParser::
-ParseOperand(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
-  OR1KOperand *Op, *Op2 = 0;
-
-  // Attempt to parse token as register
-  unsigned RegNo;
-  Op = ParseRegister(RegNo);
-  
-  // Attempt to parse token as immediate
-  if(!Op) {
-    Op = ParseImmediate();
-    
-    // If next token is left parenthesis, then memory operand, attempt to
-    // parse next token as base of 
-    // FIXME: There should be a better way of doing this.
-    if(Op)
-      if(getLexer().is(AsmToken::LParen)) {
-        getLexer().Lex();
-        // Swap tokens around so that they can be parsed
-        Op2 = Op;
-        Op = ParseRegister(RegNo);
-
-        // Invalid memory operand, fail
-        if(!Op || getLexer().isNot(AsmToken::RParen)) {
-          Error(Parser.getTok().getLoc(), "unknown operand");
-          return true;
-        }
-        getLexer().Lex();
-      }
-  }
-
-  // If the token could not be parsed then fail
-  if(!Op) {
-    Error(Parser.getTok().getLoc(), "unknown operand");
+bool OR1KAsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
+                                  SMLoc &EndLoc) {
+  const AsmToken &Tok = getParser().getTok();
+  if (Tok.getKind() != AsmToken::Identifier)
     return true;
+
+  RegNo = MatchRegisterName(Tok.getString().lower());
+
+  StartLoc = Tok.getLoc();
+  EndLoc = Tok.getEndLoc();
+
+  return RegNo == 0;
+}
+
+bool OR1KAsmParser::matchImmediate(const MCExpr *&Expr, SMLoc &EndLoc) {
+  const AsmToken &Tok = getLexer().getTok();
+  SMLoc StartLoc = Tok.getLoc();
+  MCContext &Ctx = getParser().getContext();
+
+  OR1KMCExpr::VariantKind VK = OR1KMCExpr::VK_Invalid;
+
+  if (Tok.getKind() == AsmToken::Identifier)
+    VK = OR1KMCExpr::getVariantKindForName(Tok.getString());
+
+  // Check for relocation variant name
+  if (Tok.getKind() == AsmToken::Identifier &&
+      VK != OR1KMCExpr::VK_Invalid) {
+    Lex();
+
+    if (Tok.getKind() != AsmToken::LParen)
+      return true;
+
+    Lex();
+
+    if (getParser().parseExpression(Expr))
+      return true;
+
+    if (Tok.getKind() != AsmToken::RParen)
+      return true;
+
+    Lex();
+
+    EndLoc = Tok.getLoc();
+
+    switch (VK) {
+    default: return Error(StartLoc, "invalid relocation for immediate value");
+    case OR1KMCExpr::VK_OR1K_ABS_HI16:
+    case OR1KMCExpr::VK_OR1K_ABS_LO16:
+    case OR1KMCExpr::VK_OR1K_GOT16:
+    case OR1KMCExpr::VK_OR1K_GOTPC_HI16:
+    case OR1KMCExpr::VK_OR1K_GOTPC_LO16:
+    case OR1KMCExpr::VK_OR1K_GOTOFF_HI16:
+    case OR1KMCExpr::VK_OR1K_GOTOFF_LO16:
+      break;
+    }
+
+    Expr = OR1KMCExpr::Create(VK, Expr, Ctx);
+
+    return false;
   }
 
-  // Push back parsed operand(s) into list of operands
-  Operands.push_back(Op);
-  if(Op2)
-    Operands.push_back(Op2);
+  if (getParser().parseExpression(Expr, EndLoc))
+    return true;
 
+  int64_t Value;
+  if (!Expr->EvaluateAsAbsolute(Value))
+    return Error(StartLoc, "missing relocation for symbolic expression");
+
+  if (!isUInt<16>(abs64(Value)))
+    return Error(StartLoc, "expression value out of bounds");
+
+  Expr = MCConstantExpr::Create(Value, Ctx);
   return false;
 }
 
-bool OR1KAsmParser::
-ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
-                 SMLoc NameLoc,
-                 SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
-  // First operand is token for instruction
-  // FIXME: Can we have a more efficient implementation of this?
-  size_t dotLoc = Name.find('.');
-  Operands.push_back(OR1KOperand::CreateToken(Name.substr(0,dotLoc),NameLoc));
-  if (dotLoc < Name.size()) {
-    size_t dotLoc2 = Name.rfind('.');
-    if (dotLoc == dotLoc2)
-      Operands.push_back(OR1KOperand::CreateToken(Name.substr(dotLoc),NameLoc));
-    else {
-      Operands.push_back(OR1KOperand::CreateToken(Name.substr
-                                        (dotLoc, dotLoc2-dotLoc), NameLoc));
-      Operands.push_back(OR1KOperand::CreateToken(Name.substr
-                                        (dotLoc2), NameLoc));
+bool OR1KAsmParser::matchJumpTarget(const MCExpr *&Expr, SMLoc &EndLoc) {
+  const AsmToken &Tok = getLexer().getTok();
+  SMLoc StartLoc = Tok.getLoc();
+  MCContext &Ctx = getParser().getContext();
+
+  OR1KMCExpr::VariantKind VK = OR1KMCExpr::VK_Invalid;
+
+  if (Tok.getKind() == AsmToken::Identifier)
+    VK = OR1KMCExpr::getVariantKindForName(Tok.getString());
+
+  // Check for relocation variant name
+  if (Tok.getKind() == AsmToken::Identifier &&
+      VK != OR1KMCExpr::VK_Invalid) {
+    Lex();
+
+    if (Tok.getKind() != AsmToken::LParen)
+      return true;
+
+    Lex();
+
+    if (getParser().parseExpression(Expr))
+      return true;
+
+    if (Tok.getKind() != AsmToken::RParen)
+      return true;
+
+    Lex();
+
+    EndLoc = Tok.getLoc();
+
+    if (VK != OR1KMCExpr::VK_OR1K_PLT26)
+      return Error(StartLoc, "invalid relocation for jump target value");
+
+    Expr = OR1KMCExpr::Create(VK, Expr, Ctx);
+
+    return false;
+  }
+
+  if (getParser().parseExpression(Expr, EndLoc))
+    return true;
+
+  int64_t Value;
+  if (!Expr->EvaluateAsAbsolute(Value)) {
+    Expr = OR1KMCExpr::Create(OR1KMCExpr::VK_OR1K_REL26, Expr, Ctx);
+    return false;
+  }
+
+  if (!isShiftedInt<26, 2>(Value))
+    return Error(StartLoc, "expression value out of bounds");
+
+  Expr = MCConstantExpr::Create(Value, Ctx);
+  return false;
+}
+
+OR1KAsmParser::OperandMatchResultTy
+OR1KAsmParser::parseJumpTargetOperand(ParsedOperandsVector &Operands) {
+  const AsmToken &Tok = getLexer().getTok();
+  SMLoc StartLoc = Tok.getLoc();
+
+  const MCExpr *Expr = 0;
+  SMLoc EndLoc;
+  if (matchJumpTarget(Expr, EndLoc))
+    return MatchOperand_NoMatch;
+
+  Operands.push_back(OR1KOperand::CreateJumpTarget(Expr, StartLoc, EndLoc));
+
+  return MatchOperand_Success;
+}
+
+OR1KAsmParser::OperandMatchResultTy
+OR1KAsmParser::parseMemOperand(ParsedOperandsVector &Operands) {
+  const AsmToken &Tok = getLexer().getTok();
+  SMLoc StartLoc = Tok.getLoc();
+
+  const MCExpr *Offset = 0;
+  SMLoc OffsetEndLoc;
+  if (matchImmediate(Offset, OffsetEndLoc))
+    return MatchOperand_NoMatch;
+
+  assert(Offset && "Invalid offset!");
+
+  if (Tok.getKind() != AsmToken::LParen)
+    return MatchOperand_NoMatch;
+
+  Lex();
+
+  unsigned Reg;
+  SMLoc StartRegLoc;
+  SMLoc EndRegLoc;
+  if (ParseRegister(Reg, StartRegLoc, EndRegLoc))
+    return MatchOperand_NoMatch;
+
+  Lex();
+
+  if (Tok.getKind() != AsmToken::RParen)
+    return MatchOperand_ParseFail;
+
+  SMLoc EndLoc = Tok.getEndLoc();
+  Operands.push_back(OR1KOperand::CreateMem(Reg, Offset, StartLoc, EndLoc));
+
+  Lex();
+
+  return MatchOperand_Success;
+}
+
+OR1KAsmParser::OperandMatchResultTy
+OR1KAsmParser::parseRegister(ParsedOperandsVector &Operands, StringRef Name) {
+  unsigned RegNo;
+  SMLoc StartLoc;
+  SMLoc EndLoc;
+
+  if (ParseRegister(RegNo, StartLoc, EndLoc))
+    return MatchOperand_NoMatch;
+
+  Operands.push_back(OR1KOperand::CreateReg(RegNo, StartLoc, EndLoc));
+
+  Lex();
+  return MatchOperand_Success;
+}
+
+OR1KAsmParser::OperandMatchResultTy
+OR1KAsmParser::parseImmediate(ParsedOperandsVector &Operands, StringRef Name) {
+  const AsmToken &Tok = getLexer().getTok();
+
+  SMLoc StartLoc = Tok.getLoc();
+  SMLoc EndLoc = Tok.getEndLoc();
+
+  switch (Tok.getKind()) {
+  case AsmToken::Integer:
+  case AsmToken::Minus:
+  case AsmToken::Plus:
+  case AsmToken::LParen:
+  case AsmToken::Identifier: {
+    const MCExpr *Exp;
+    if (matchImmediate(Exp, EndLoc))
+      break;
+
+    Operands.push_back(OR1KOperand::CreateImm(Exp, StartLoc, EndLoc));
+    return MatchOperand_Success;
+  }
+  default:
+    break;
+  }
+  return MatchOperand_NoMatch;
+}
+
+#define CHECK_OP_MATCH(Res)       \
+  do {                           \
+    switch (Res) {               \
+    case MatchOperand_Success:   \
+      return false;              \
+    case MatchOperand_ParseFail: \
+      return false;              \
+    case MatchOperand_NoMatch:   \
+      break;                     \
+    }                            \
+  } while (0)
+
+bool OR1KAsmParser::parseOperand(ParsedOperandsVector &Operands,
+                                 StringRef Name) {
+  // Try custom parsers first.
+  CHECK_OP_MATCH(MatchOperandParserImpl(Operands, Name));
+
+  // Try to parse registers.
+  CHECK_OP_MATCH(parseRegister(Operands, Name));
+
+  // Try to parse immediates.
+  CHECK_OP_MATCH(parseImmediate(Operands, Name));
+
+  return true;
+}
+
+#undef CHECK_OP_MATCH
+
+bool OR1KAsmParser::ParseInstruction(ParseInstructionInfo &Info,
+                                     StringRef Name, SMLoc NameLoc,
+                                     ParsedOperandsVector &Operands) {
+  // Check if we have valid mnemonic
+  if (!mnemonicIsValid(Name, 0)) {
+    getParser().eatToEndOfStatement();
+    return Error(NameLoc, "Unknown instruction");
+  }
+  // First operand in MCInst is instruction mnemonic.
+  Operands.push_back(OR1KOperand::CreateToken(Name, NameLoc, NameLoc));
+
+  SMLoc OpLoc;
+
+  // Read the remaining operands.
+  if (getLexer().isNot(AsmToken::EndOfStatement)) {
+    OpLoc = getLexer().getLoc();
+    // Read the first operand.
+    if (parseOperand(Operands, Name)) {
+      getParser().eatToEndOfStatement();
+      return Error(OpLoc, "illegal operand");
+    }
+
+    while (getLexer().is(AsmToken::Comma)) {
+      getParser().Lex(); // Eat the comma.
+      OpLoc = getLexer().getLoc();
+      // Parse and remember the operand.
+      if (parseOperand(Operands, Name)) {
+        getParser().eatToEndOfStatement();
+        return Error(OpLoc, "illegal operand");
+      }
     }
   }
-
-  // If there are no more operands, then finish
-  if (getLexer().is(AsmToken::EndOfStatement))
-    return false;
-
-  // Parse first operand
-  if (ParseOperand(Operands))
-    return true;
-
-  // Parse until end of statement, consuming commas between operands
-  while (getLexer().isNot(AsmToken::EndOfStatement) &&
-        getLexer().is(AsmToken::Comma)) {
-    // Consume comma token
-    getLexer().Lex();
-
-    // Parse next operand
-    if(ParseOperand(Operands))
-      return true;
+  OpLoc = getLexer().getLoc();
+  if (getLexer().isNot(AsmToken::EndOfStatement)) {
+    getParser().eatToEndOfStatement();
+    return Error(OpLoc, "unexpected token in argument list");
   }
-
+  getParser().Lex(); // Consume the EndOfStatement.
   return false;
 }
 
-bool OR1KAsmParser::
-ParseDirective(AsmToken DirectiveID) {
+bool OR1KAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
+                                            ParsedOperandsVector &Operands,
+                                            MCStreamer &Out,
+                                            unsigned &ErrorInfo,
+                                            bool MatchingInlineAsm) {
+  MCInst Inst;
+
+  switch (MatchInstructionImpl(Operands, Inst, ErrorInfo, MatchingInlineAsm)) {
+  case Match_Success:
+    Out.EmitInstruction(Inst, STI);
+    return false;
+  case Match_MissingFeature:
+    return Error(IDLoc, "Instruction use requires option to be enabled");
+  case Match_MnemonicFail:
+    return Error(IDLoc, "Unrecognized instruction mnemonic");
+  case Match_InvalidOperand: {
+    SMLoc ErrorLoc = IDLoc;
+    if (ErrorInfo != ~0U) {
+      if (ErrorInfo >= Operands.size())
+        return Error(IDLoc, "Too few operands for instruction");
+
+      ErrorLoc = Operands[ErrorInfo]->getStartLoc();
+      if (ErrorLoc == SMLoc())
+        ErrorLoc = IDLoc;
+    }
+    return Error(IDLoc, "Invalid operand for instruction");
+  }
+  default: break;
+  }
+  return true;
+}
+
+bool OR1KAsmParser::ParseDirective(AsmToken DirectiveID) {
   return true;
 }
 
 extern "C" void LLVMInitializeOR1KAsmParser() {
   RegisterMCAsmParser<OR1KAsmParser> X(TheOR1KTarget);
 }
-
-#define GET_REGISTER_MATCHER
-#define GET_MATCHER_IMPLEMENTATION
-#include "OR1KGenAsmMatcher.inc"

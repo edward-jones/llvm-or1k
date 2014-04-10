@@ -11,6 +11,7 @@
 #define OR1K_MCINSTLOWER_H
 
 #include "llvm/Support/Compiler.h"
+#include "llvm/ADT/SmallVector.h"
 
 namespace llvm {
   class AsmPrinter;
@@ -25,21 +26,19 @@ namespace llvm {
   /// OR1KMCInstLower - This class is used to lower an MachineInstr
   /// into an MCInst.
 class LLVM_LIBRARY_VISIBILITY OR1KMCInstLower {
-  MCContext &Ctx;
-
-  AsmPrinter &Printer;
 public:
   OR1KMCInstLower(MCContext &ctx, AsmPrinter &printer)
-    : Ctx(ctx), Printer(printer) {}
-  void Lower(const MachineInstr *MI, MCInst &OutMI) const;
+   : Ctx(ctx), Printer(printer) {}
 
-  MCOperand LowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym) const;
+  void lower(const MachineInstr *MI, MCInst &OutMI) const;
 
-  MCSymbol *GetGlobalAddressSymbol(const MachineOperand &MO) const;
-  MCSymbol *GetBlockAddressSymbol(const MachineOperand &MO) const;
-  MCSymbol *GetExternalSymbolSymbol(const MachineOperand &MO) const;
-  MCSymbol *GetJumpTableSymbol(const MachineOperand &MO) const;
-  MCSymbol *GetConstantPoolIndexSymbol(const MachineOperand &MO) const;
+private:
+  MCOperand lowerSymbolOperand(const MachineOperand &MO) const;
+  MCSymbol *getSymbolForOperand(const MachineOperand &MO) const;
+
+private:
+  MCContext &Ctx;
+  AsmPrinter &Printer;
 };
 
 }

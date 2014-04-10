@@ -69,8 +69,6 @@ TargetPassConfig *OR1KTargetMachine::createPassConfig(PassManagerBase &PM) {
 bool OR1KPassConfig::addInstSelector() {
   addPass(createOR1KISelDag(getOR1KTargetMachine()));
 
-  // Prepend instructions to set the "global base reg" for PIC.
-  addPass(createOR1KGlobalBaseRegPass());
   return false;
 }
 

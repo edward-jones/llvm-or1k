@@ -66,27 +66,12 @@ class SPRi<bits<5> group, bits<11> num, string n> : Register<n> {
 }
 
 // Special purpose registers
-def SR    : SPRi<0 ,17, "SR">, DwarfRegNum<[32]>;
-def MACLO : SPRi<5, 1, "MACLO">, DwarfRegNum<[33]>;
-def MACHI : SPRi<5, 2, "MACHI">, DwarfRegNum<[34]>;
+def SR    : SPRi<0 ,17, "">;
+def MACLO : SPRi<5, 1, "">;
+def MACHI : SPRi<5, 2, "">;
 
 // Register classes.
-//
-// FIXME: the register order should be defined in terms of the preferred
-// allocation order...
-//
-def GPR : RegisterClass<"OR1K", [i32,f32], 32, (add R3, R4, R5, R6, R7,
-                                     R8,
-                                     R12, R13, R14, R15,
-                                     R16, R17, R18, R19, R20, R21, R22, R23,
-                                     R24, R25, R26, R27, R28, R29, R30, R31,
-                                     R10, // current thread info
-                                     R11, // return value
-                                     R1,  // stack ptr
-                                     R2,  // frame ptr
-                                     R9,  // link register
-                                     R0   // constant 0
-                                     )>;
+def GPR : RegisterClass<"OR1K", [i32,f32], 32, (sequence "R%u", 0, 31)>;
 
 def SPR : RegisterClass<"OR1K", [i32], 32, (add SR, MACLO, MACHI)> {
   let CopyCost = -1;  // Don't allow copying of special purpose registers.

@@ -74,4 +74,5 @@ class Pseudo<dag outs, dag ins, string asmstr,
   : InstOR1K<outs, ins, asmstr, pattern, itin> {
   let Inst{15-0} = 0;
   let isPseudo = 1;
+  let isCodeGenOnly = 1;
 }

@@ -33,10 +33,6 @@ FunctionPass *createOR1KISelDag(OR1KTargetMachine &TM);
 /// with useful instructions or nop's
 FunctionPass *createOR1KDelaySlotFillerPass(OR1KTargetMachine &TM);
 
-/// createOR1KGlobalBaseRegPass - This pass initializes a global base
-/// register for PIC on OR1K.
-FunctionPass* createOR1KGlobalBaseRegPass();
-
 /// createOR1KMACSubPass - This pass tries to substiture multiply and accumulate
 /// operations with the dedicated hardware instructions.
 LoopPass* createOR1KMACSubPass(OR1KTargetMachine &TM);
