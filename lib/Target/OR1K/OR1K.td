@@ -58,8 +58,8 @@ def FeatureFBit  : SubtargetFeature<"fbit", "HasFBit", "true",
 class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, OR1KGenericItineraries, Features>;
 
-def : Proc<"generic", [FeatureMul, FeatureDiv]>;
-def : Proc<"or1200",  [FeatureMul, FeatureDiv]>;
+def : Proc<"generic", []>;
+def : Proc<"or1200",[FeatureMul, FeatureRor, FeatureExt, FeatureSFII]>;
 
 def OpenRISCInstPrinter : AsmWriter {
   string AsmWriterClassName  = "InstPrinter";
