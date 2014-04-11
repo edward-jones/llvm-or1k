@@ -3,6 +3,7 @@ add_llvm_library(LLVMOR1KDesc
   OR1KELFObjectWriter.cpp
   OR1KMCAsmInfo.cpp
   OR1KMCCodeEmitter.cpp
+  OR1KMCExpr.cpp
   OR1KMCTargetDesc.cpp
   )
 
