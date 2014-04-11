@@ -1,4 +1,4 @@
-; RUN: llc -march=or1k < %s | FileCheck %s
+; RUN: llc -march=or1k -mattr=mul < %s | FileCheck %s
 
 define i64 @add64rr(i64 %a, i64 %b) {
 entry:
