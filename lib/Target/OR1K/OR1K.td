@@ -55,16 +55,25 @@ def FeatureFBit  : SubtargetFeature<"fbit", "HasFBit", "true",
 // OR1K processors supported.
 //===----------------------------------------------------------------------===//
 
-class Proc<string Name, list<SubtargetFeature> Features>
- : Processor<Name, OR1KGenericItineraries, Features>;
+def OR1KSchedMachineModel : SchedMachineModel {
+  let Itineraries = OR1KGenericItineraries;
+  let IssueWidth = 1;
+}
 
-def : Proc<"generic", []>;
-def : Proc<"or1200",[FeatureMul, FeatureRor, FeatureExt, FeatureSFII]>;
+def : ProcessorModel<"generic", OR1KSchedMachineModel,
+                     []>;
+def : ProcessorModel<"or1200", OR1KSchedMachineModel,
+                     [FeatureMul, FeatureRor, FeatureExt, FeatureSFII]>;
 
-def OpenRISCInstPrinter : AsmWriter {
+def OR1KInstPrinter : AsmWriter {
   string AsmWriterClassName  = "InstPrinter";
   bit isMCAsmWriter = 1;
 }
+
+def OR1KAsmParser : AsmParser {
+  let MnemonicContainsDot = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Declare the target which we are implementing
 //===----------------------------------------------------------------------===//
@@ -72,5 +81,6 @@ def OpenRISCInstPrinter : AsmWriter {
 def OR1K : Target {
   // Pull in Instruction Info:
   let InstructionSet = OR1KInstrInfo;
-  let AssemblyWriters = [OpenRISCInstPrinter];
+  let AssemblyWriters = [OR1KInstPrinter];
+  let AssemblyParsers = [OR1KAsmParser];
 }

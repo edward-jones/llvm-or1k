@@ -46,39 +46,41 @@ static MCRegisterInfo *createOR1KMCRegisterInfo(StringRef TT) {
 }
 
 static MCSubtargetInfo *createOR1KMCSubtargetInfo(StringRef TT, StringRef CPU,
-                                                   StringRef FS) {
+                                                  StringRef FS) {
   MCSubtargetInfo *X = new MCSubtargetInfo();
   InitOR1KMCSubtargetInfo(X, TT, CPU, FS);
   return X;
 }
 
 static MCCodeGenInfo *createOR1KMCCodeGenInfo(StringRef TT, Reloc::Model RM,
-                                               CodeModel::Model CM,
-                                               CodeGenOpt::Level OL) {
+                                              CodeModel::Model CM,
+                                              CodeGenOpt::Level OL) {
   MCCodeGenInfo *X = new MCCodeGenInfo();
   X->InitMCCodeGenInfo(RM, CM, OL);
   return X;
 }
 
-static MCStreamer *createOR1KMCStreamer(const Target &T, StringRef TT,
-                                    MCContext &Ctx, MCAsmBackend &MAB,
-                                    raw_ostream &_OS,
-                                    MCCodeEmitter *_Emitter,
-                                    const MCSubtargetInfo &STI,
-                                    bool RelaxAll,
-                                    bool NoExecStack) {
-  Triple TheTriple(TT);
-
-  if (TheTriple.isOSDarwin()) {
-    llvm_unreachable("OR1K does not support Darwin MACH-O format");
-  }
-
-  if (TheTriple.isOSWindows()) {
-    llvm_unreachable("OR1K does not support Windows COFF format");
-  }
-
-  return createELFStreamer(Ctx, MAB, _OS, _Emitter, RelaxAll, NoExecStack);
+static MCStreamer *
+createOR1KMCStreamer(const Target &T, StringRef TT, MCContext &Ctx,
+                     MCAsmBackend &MAB, raw_ostream &OS, MCCodeEmitter *Emitter,
+                     const MCSubtargetInfo &STI, bool RelaxAll,
+                     bool NoExecStack) {
+  MCStreamer *S = createELFStreamer(Ctx, MAB, OS, Emitter, RelaxAll,
+                                    NoExecStack);
+  return S;
 }
+
+static MCStreamer *
+createOR1KMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
+                        bool isVerboseAsm, bool useCFI, bool useDwarfDirectory,
+                        MCInstPrinter *InstPrint, MCCodeEmitter *CE,
+                        MCAsmBackend *TAB, bool ShowInst) {
+  MCStreamer *S = llvm::createAsmStreamer(Ctx, OS, isVerboseAsm, useCFI,
+                                          useDwarfDirectory, InstPrint, CE,
+                                          TAB, ShowInst);
+  return S;
+}
+
 
 static MCInstPrinter *createOR1KMCInstPrinter(const Target &T,
                                               unsigned SyntaxVariant,
@@ -96,8 +98,7 @@ extern "C" void LLVMInitializeOR1KTargetMC() {
   RegisterMCAsmInfo<OR1KMCAsmInfo> X(TheOR1KTarget);
 
   // Register the MC codegen info.
-  TargetRegistry::RegisterMCCodeGenInfo(TheOR1KTarget,
-                                       createOR1KMCCodeGenInfo);
+  TargetRegistry::RegisterMCCodeGenInfo(TheOR1KTarget, createOR1KMCCodeGenInfo);
 
   // Register the MC instruction info.
   TargetRegistry::RegisterMCInstrInfo(TheOR1KTarget, createOR1KMCInstrInfo);
@@ -109,20 +110,20 @@ extern "C" void LLVMInitializeOR1KTargetMC() {
   TargetRegistry::RegisterMCSubtargetInfo(TheOR1KTarget,
                                           createOR1KMCSubtargetInfo);
 
-  // Register the MC code emitter
+  // Register the MC code emitter.
   TargetRegistry::RegisterMCCodeEmitter(TheOR1KTarget,
                                         llvm::createOR1KMCCodeEmitter);
 
-  // Register the ASM Backend
+  // Register the ASM Backend.
   TargetRegistry::RegisterMCAsmBackend(TheOR1KTarget,
                                        createOR1KAsmBackend);
 
-  // Register the object streamer
-  TargetRegistry::RegisterMCObjectStreamer(TheOR1KTarget,
-                                           createOR1KMCStreamer);
+  // Register the asm streamer.
+  TargetRegistry::RegisterAsmStreamer(TheOR1KTarget, createOR1KMCAsmStreamer);
 
+  // Register the object streamer.
+  TargetRegistry::RegisterMCObjectStreamer(TheOR1KTarget, createOR1KMCStreamer);
 
   // Register the MCInstPrinter.
-  TargetRegistry::RegisterMCInstPrinter(TheOR1KTarget,
-                                        createOR1KMCInstPrinter);
+  TargetRegistry::RegisterMCInstPrinter(TheOR1KTarget, createOR1KMCInstPrinter);
 }

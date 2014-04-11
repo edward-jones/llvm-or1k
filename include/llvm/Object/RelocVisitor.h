@@ -153,6 +153,22 @@ public:
         HasError = true;
         return RelocToApply();
       }
+    } else if (FileFormat == "ELF32-arm") {
+      switch (RelocType) {
+      default:
+        HasError = true;
+        return RelocToApply();
+      case llvm::ELF::R_ARM_ABS32:
+        return visitELF_ARM_ABS32(R, Value);
+      }
+    } else if (FileFormat == "ELF32-openrisc") {
+      switch (RelocType) {
+      case llvm::ELF::R_OR1K_32:
+        return visitELF_OR1K_32(R, Value);
+      default:
+        HasError = true;
+        return RelocToApply();
+      }
     }
     HasError = true;
     return RelocToApply();
@@ -325,6 +341,17 @@ private:
     return RelocToApply(Value + Addend, 8);
   }
 
+  RelocToApply visitELF_ARM_ABS32(RelocationRef R, uint64_t Value) {
+    int64_t Addend = getAddend32LE(R);
+    return RelocToApply(Value + Addend, 4);
+  }
+
+  RelocToApply visitELF_OR1K_32(RelocationRef R, uint64_t Value) {
+    int64_t Addend;
+    getELFRelocationAddend(R, Addend);
+    uint32_t Res = (Value + Addend) & 0xFFFFFFFF;
+    return RelocToApply(Res, 4);
+  }
 };
 
 }

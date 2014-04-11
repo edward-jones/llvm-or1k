@@ -44,13 +44,6 @@ void MCExpr::print(raw_ostream &OS) const {
     // absolute names.
     bool UseParens = Sym.getName()[0] == '$';
 
-    // FIXME: how does mips avoid printing @getVariantKindName?
-    if (SRE.getKind() >= MCSymbolRefExpr::VK_OR1K_ABS_HI &&
-        SRE.getKind() <= MCSymbolRefExpr::VK_OR1K_GOTOFFLO) {
-      OS << Sym;
-      return;
-    }
-
     if (UseParens)
       OS << '(' << Sym << ')';
     else
@@ -187,7 +180,14 @@ StringRef MCSymbolRefExpr::getVariantKindName(VariantKind Kind) {
   case VK_TPOFF: return "TPOFF";
   case VK_DTPOFF: return "DTPOFF";
   case VK_TLVP: return "TLVP";
+  case VK_TLVPPAGE: return "TLVPPAGE";
+  case VK_TLVPPAGEOFF: return "TLVPPAGEOFF";
+  case VK_PAGE: return "PAGE";
+  case VK_PAGEOFF: return "PAGEOFF";
+  case VK_GOTPAGE: return "GOTPAGE";
+  case VK_GOTPAGEOFF: return "GOTPAGEOFF";
   case VK_SECREL: return "SECREL32";
+  case VK_WEAKREF: return "WEAKREF";
   case VK_ARM_NONE: return "none";
   case VK_ARM_TARGET1: return "target1";
   case VK_ARM_TARGET2: return "target2";
@@ -272,14 +272,6 @@ StringRef MCSymbolRefExpr::getVariantKindName(VariantKind Kind) {
   case VK_Mips_CALL_HI16: return "CALL_HI16";
   case VK_Mips_CALL_LO16: return "CALL_LO16";
   case VK_COFF_IMGREL32: return "IMGREL32";
-  case VK_OR1K_ABS_HI: return "hi";
-  case VK_OR1K_ABS_LO: return "lo";
-  case VK_OR1K_PLT: return "plt";
-  case VK_OR1K_GOTPCHI: return "gotpchi";
-  case VK_OR1K_GOTPCLO: return "gotpclo";
-  case VK_OR1K_GOTOFFHI: return "gotoffhi";
-  case VK_OR1K_GOTOFFLO: return "gotofflo";
-  case VK_OR1K_GOT: return "got";
   }
   llvm_unreachable("Invalid variant kind");
 }
@@ -315,6 +307,18 @@ MCSymbolRefExpr::getVariantKindForName(StringRef Name) {
     .Case("dtpoff", VK_DTPOFF)
     .Case("TLVP", VK_TLVP)
     .Case("tlvp", VK_TLVP)
+    .Case("TLVPPAGE", VK_TLVPPAGE)
+    .Case("tlvppage", VK_TLVPPAGE)
+    .Case("TLVPPAGEOFF", VK_TLVPPAGEOFF)
+    .Case("tlvppageoff", VK_TLVPPAGEOFF)
+    .Case("PAGE", VK_PAGE)
+    .Case("page", VK_PAGE)
+    .Case("PAGEOFF", VK_PAGEOFF)
+    .Case("pageoff", VK_PAGEOFF)
+    .Case("GOTPAGE", VK_GOTPAGE)
+    .Case("gotpage", VK_GOTPAGE)
+    .Case("GOTPAGEOFF", VK_GOTPAGEOFF)
+    .Case("gotpageoff", VK_GOTPAGEOFF)
     .Case("IMGREL", VK_COFF_IMGREL32)
     .Case("imgrel", VK_COFF_IMGREL32)
     .Case("SECREL32", VK_SECREL)
@@ -646,17 +650,31 @@ bool MCExpr::EvaluateAsRelocatableImpl(MCValue &Res,
   case SymbolRef: {
     const MCSymbolRefExpr *SRE = cast<MCSymbolRefExpr>(this);
     const MCSymbol &Sym = SRE->getSymbol();
+    const MCAsmInfo &MCAsmInfo = SRE->getMCAsmInfo();
 
     // Evaluate recursively if this is a variable.
-    if (Sym.isVariable() && SRE->getKind() == MCSymbolRefExpr::VK_None) {
-      bool Ret = Sym.getVariableValue()->EvaluateAsRelocatableImpl(Res, Asm,
-                                                                   Layout,
-                                                                   Addrs,
-                                                                   true);
-      // If we failed to simplify this to a constant, let the target
-      // handle it.
-      if (Ret && !Res.getSymA() && !Res.getSymB())
-        return true;
+    if (Sym.isVariable()) {
+      if (Sym.getVariableValue()->EvaluateAsRelocatableImpl(Res, Asm, Layout,
+                                                            Addrs, true)) {
+        const MCSymbolRefExpr *A = Res.getSymA();
+        const MCSymbolRefExpr *B = Res.getSymB();
+
+        if (MCAsmInfo.hasSubsectionsViaSymbols()) {
+          // FIXME: This is small hack. Given
+          // a = b + 4
+          // .long a
+          // the OS X assembler will completely drop the 4. We should probably
+          // include it in the relocation or produce an error if that is not
+          // possible.
+          if (!A && !B)
+            return true;
+        } else {
+          bool IsSymbol = A && A->getSymbol().isDefined();
+          bool IsWeakRef = SRE->getKind() == MCSymbolRefExpr::VK_WEAKREF;
+          if (!IsSymbol && !IsWeakRef)
+            return true;
+        }
+      }
     }
 
     Res = MCValue::get(SRE, 0, 0);

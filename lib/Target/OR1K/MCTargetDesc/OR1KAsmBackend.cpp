@@ -21,32 +21,8 @@
 
 using namespace llvm;
 
-// Prepare value for the target space
-static unsigned adjustFixupValue(unsigned Kind, uint64_t Value) {
-  switch (Kind) {
-    // FIXME: List all valid fixups instead
-    default:
-      return 0;
-    case OR1K::fixup_OR1K_REL26:
-    case OR1K::fixup_OR1K_PLT26:
-      // Currently this is used only for branches
-      // Branch instructions require the value shifted down to to provide
-      // a larger address range that can be branched to.
-      Value >>= 2;
-    break;
-    // Values taken from BFD Relocation definitions
-    case OR1K::fixup_OR1K_HI16_INSN:
-    case OR1K::fixup_OR1K_GOTPC_HI16:
-    case OR1K::fixup_OR1K_GOTOFF_HI16:
-      Value >>= 16;
-      Value &= 0xffff;
-    break;
-
-  }
-  return Value;
-}
-
 namespace {
+
 class OR1KAsmBackend : public MCAsmBackend {
   Triple::OSType OSType;
 
@@ -56,7 +32,7 @@ public:
   }
 
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value) const;
+                  uint64_t Value, bool IsPCRel) const;
 
   MCObjectWriter *createObjectWriter(raw_ostream &OS) const;
 
@@ -76,6 +52,8 @@ public:
   bool writeNopData(uint64_t Count, MCObjectWriter *OW) const;
 };
 
+} // end anonymous namespace
+
 bool OR1KAsmBackend::writeNopData(uint64_t Count, MCObjectWriter *OW) const {
   if ((Count % 4) != 0)
     return false;
@@ -86,10 +64,42 @@ bool OR1KAsmBackend::writeNopData(uint64_t Count, MCObjectWriter *OW) const {
   return true;
 }
 
+// Prepare value for the target space
+static unsigned adjustFixupValue(unsigned Kind, uint64_t Value) {
+  switch (Kind) {
+  default:
+    llvm_unreachable("Unknown fixup kind!");
+  case FK_Data_1:
+  case FK_Data_2:
+  case FK_Data_4:
+  break;
+  case OR1K::fixup_OR1K_REL26:
+  case OR1K::fixup_OR1K_PLT26:
+    // Currently this is used only for branches
+    // Branch instructions require the value shifted down to to provide
+    // a larger address range that can be branched to.
+    Value >>= 2;
+  break;
+  // Values taken from BFD Relocation definitions
+  case OR1K::fixup_OR1K_HI16_INSN:
+  case OR1K::fixup_OR1K_GOTPC_HI16:
+  case OR1K::fixup_OR1K_GOTOFF_HI16:
+    Value >>= 16;
+  case OR1K::fixup_OR1K_LO16_INSN:
+  case OR1K::fixup_OR1K_GOT16:
+  case OR1K::fixup_OR1K_GOTPC_LO16:
+  case OR1K::fixup_OR1K_GOTOFF_LO16:
+    Value &= 0xffff;
+  break;
+  }
+  return Value;
+}
+
 void OR1KAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
-                                unsigned DataSize, uint64_t Value) const {
+                                unsigned DataSize, uint64_t Value,
+                                bool IsPCRel) const {
   MCFixupKind Kind = Fixup.getKind();
-  Value = adjustFixupValue((unsigned)Kind, Value);
+  Value = adjustFixupValue(Kind, Value);
 
   if (!Value)
     return; // This value doesn't change the encoding
@@ -97,33 +107,17 @@ void OR1KAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
   // Where in the object and where the number of bytes that need
   // fixing up
   unsigned Offset = Fixup.getOffset();
-  unsigned NumBytes = (getFixupKindInfo(Kind).TargetSize + 7) / 8;
-  unsigned FullSize;
+  unsigned NumBits = getFixupKindInfo(Kind).TargetSize;
+  unsigned NumBytes = (NumBits + 7) / 8;
 
-  switch((unsigned)Kind) {
-    default:
-      FullSize = 4;
-      break;
-  }
+  const unsigned InstrSizeInBytes = 4;
 
-  // Grab current value, if any, from bits.
-  uint64_t CurVal = 0;
-
-  // Load instruction and apply value
-  for (unsigned i = 0; i != NumBytes; ++i) {
-    unsigned Idx = (FullSize - 1 - i);
-    CurVal |= (uint64_t)((uint8_t)Data[Offset + Idx]) << (i*8);
-  }
-
-  uint64_t Mask = ((uint64_t)(-1) >>
-                   (64 - getFixupKindInfo(Kind).TargetSize));
-  CurVal |= Value & Mask;
+  // Keep fixup bits only.
+  Value &= (uint64_t(1) << NumBits) - 1;
 
   // Write out the fixed up bytes back to the code/data bits.
-  for (unsigned i = 0; i != NumBytes; ++i) {
-    unsigned Idx = (FullSize - 1 - i);
-    Data[Offset + Idx] = (uint8_t)((CurVal >> (i*8)) & 0xff);
-  }
+  for (unsigned i = 0; i != NumBytes; ++i)
+    Data[Offset + i] |= (uint8_t)(Value >> ((InstrSizeInBytes - i - 1) * 8));
 }
 
 MCObjectWriter *OR1KAsmBackend::createObjectWriter(raw_ostream &OS) const {
@@ -131,7 +125,8 @@ MCObjectWriter *OR1KAsmBackend::createObjectWriter(raw_ostream &OS) const {
                                    MCELFObjectTargetWriter::getOSABI(OSType));
 }
 
-const MCFixupKindInfo &OR1KAsmBackend::getFixupKindInfo(MCFixupKind Kind) const{
+const MCFixupKindInfo &
+OR1KAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
   const static MCFixupKindInfo Infos[OR1K::NumTargetFixupKinds] = {
     // This table *must* be in same the order of fixup_* kinds in
     // OR1KFixupKinds.h.
@@ -147,8 +142,8 @@ const MCFixupKindInfo &OR1KAsmBackend::getFixupKindInfo(MCFixupKind Kind) const{
     { "fixup_OR1K_PCREL32",     0,      32,   MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_OR1K_PCREL16",     0,      16,   MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_OR1K_PCREL8",      0,       8,   MCFixupKindInfo::FKF_IsPCRel },
-    { "fixup_OR1K_GOTPC_HI16",  0,      16,   0 },
-    { "fixup_OR1K_GOTPC_LO16",  0,      16,   0 },
+    { "fixup_OR1K_GOTPC_HI16",  0,      16,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_OR1K_GOTPC_LO16",  0,      16,   MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_OR1K_GOT16",       0,      16,   0 },
     { "fixup_OR1K_PLT26",       0,      26,   MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_OR1K_GOTOFF_HI16", 0,      16,   0 },
@@ -160,19 +155,16 @@ const MCFixupKindInfo &OR1KAsmBackend::getFixupKindInfo(MCFixupKind Kind) const{
   };
 
   if (Kind < FirstTargetFixupKind)
-     return MCAsmBackend::getFixupKindInfo(Kind);
+    return MCAsmBackend::getFixupKindInfo(Kind);
 
   assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
          "Invalid kind!");
   return Infos[Kind - FirstTargetFixupKind];
 }
 
-} // end anonymous namespace
-
-MCAsmBackend *llvm::createOR1KAsmBackend(const Target &T,
+MCAsmBackend *llvm::createOR1KAsmBackend(const Target &T, 
                                          const MCRegisterInfo &MRI,
-                                         StringRef TT,
-                                         StringRef CPU) {
+                                         StringRef TT, StringRef CPU) {
   Triple TheTriple(TT);
 
   if (TheTriple.isOSDarwin())

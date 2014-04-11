@@ -49,7 +49,8 @@ public:
   unsigned getSRetReturnReg() const { return SRetReturnReg; }
   void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
 
-  unsigned getGlobalBaseReg();
+  unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
+  void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
 
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
   void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }

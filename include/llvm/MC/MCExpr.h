@@ -158,8 +158,15 @@ public:
     VK_TLSLDM,
     VK_TPOFF,
     VK_DTPOFF,
-    VK_TLVP,      // Mach-O thread local variable relocation
+    VK_TLVP,      // Mach-O thread local variable relocations
+    VK_TLVPPAGE,
+    VK_TLVPPAGEOFF,
+    VK_PAGE,
+    VK_PAGEOFF,
+    VK_GOTPAGE,
+    VK_GOTPAGEOFF,
     VK_SECREL,
+    VK_WEAKREF,   // The link between the symbols in .weakref foo, bar
 
     VK_ARM_NONE,
     VK_ARM_TARGET1,
@@ -247,17 +254,7 @@ public:
     VK_Mips_CALL_HI16,
     VK_Mips_CALL_LO16,
 
-    VK_COFF_IMGREL32, // symbol@imgrel (image-relative)
-
-    // OR1K specific value kinds
-    VK_OR1K_ABS_HI,
-    VK_OR1K_ABS_LO,
-    VK_OR1K_PLT,
-    VK_OR1K_GOT,
-    VK_OR1K_GOTPCHI,
-    VK_OR1K_GOTPCLO,
-    VK_OR1K_GOTOFFHI,
-    VK_OR1K_GOTOFFLO
+    VK_COFF_IMGREL32  // symbol@imgrel (image-relative)
   };
 
 private:

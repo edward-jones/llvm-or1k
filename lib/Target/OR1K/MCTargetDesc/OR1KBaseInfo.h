@@ -25,43 +25,32 @@ namespace llvm {
 /// instruction info tracks.
 ///
 namespace OR1KII {
-  /// Target Operand Flag enum.
-  enum TOF {
-    //===------------------------------------------------------------------===//
-    // OR1K Specific MachineOperand flags.
 
-    MO_NO_FLAG,
+/// Target Operand Flag enum.
+enum TOF {
+  MO_NO_FLAG,
 
-    /// MO_ABS_HI/LO - Represents the hi or low part of an absolute symbol
-    /// address.
-    MO_ABS_HI,
-    MO_ABS_LO,
+  // High/Low part of an absolute symbol address.
+  MO_ABS_HI16,
+  MO_ABS_LO16,
 
-    /// MO_PIC_BASE_OFFSET - On a symbol operand this indicates that the
-    /// immediate should get the value of the symbol minus the PIC base label:
-    ///    SYMBOL_LABEL - PICBASELABEL
-    MO_PIC_BASE_OFFSET,
+  // 16bit offset from the base of the GOT for a given symbol.
+  MO_GOT16,
 
-    /// MO_GOT - On a symbol operand this indicates that the immediate is the
-    /// offset to the GOT entry for the symbol name from the base of the GOT.
-    MO_GOT,
+  // High/Low part of the offset from the base of the GOT for a given symbol.
+  MO_GOTOFF_HI16,
+  MO_GOTOFF_LO16,
 
-    /// MO_GOTOFFHI/MO_GOTOFFLO - On a symbol operand this indicates that the
-    /// immediate is the offset to the location of the symbol name from the
-    /// base of the GOT.
-    MO_GOTOFFHI,
-    MO_GOTOFFLO,
+  // High/Low part of the offset to the GOT entry for a given symbol from the
+  // the current code location.
+  MO_GOTPC_HI16,
+  MO_GOTPC_LO16,
 
-    /// MO_GOTPCHI/MO_GOTPCLO - On a symbol operand this indicates that
-    /// the immediate is an offset to the GOT entry for the symbol name
-    /// from the current code location.
-    MO_GOTPCHI,
-    MO_GOTPCLO,
+  // 26bit offset to the PLT entry of a given symbol from the current code
+  // location.
+  MO_PLT26
+};
 
-    /// MO_PLT - On a symbol operand this indicates that the immediate is
-    /// offset to the PLT entry of symbol name from the current code location.
-    MO_PLT
-  };
 }
 
 }

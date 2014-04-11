@@ -204,27 +204,51 @@ EmitDwarfLineTable(MCStreamer *MCOS, const MCSection *Section,
 //
 // This emits the Dwarf file and the line tables.
 //
-const MCSymbol *MCDwarfLineTable::Emit(MCStreamer *MCOS) {
+void MCDwarfLineTable::Emit(MCStreamer *MCOS) {
   MCContext &context = MCOS->getContext();
 
-  // CUID and MCLineTableSymbols are set in DwarfDebug, when DwarfDebug does
-  // not exist, CUID will be 0 and MCLineTableSymbols will be empty.
-  // Handle Compile Unit 0, the line table start symbol is the section symbol.
-  auto I = MCOS->getContext().getMCDwarfLineTables().begin(),
-       E = MCOS->getContext().getMCDwarfLineTables().end();
+  auto &LineTables = context.getMCDwarfLineTables();
+
+  // Bail out early so we don't switch to the debug_line section needlessly and
+  // in doing so create an unnecessary (if empty) section.
+  if (LineTables.empty())
+    return;
 
   // Switch to the section where the table will be emitted into.
   MCOS->SwitchSection(context.getObjectFileInfo()->getDwarfLineSection());
 
-  const MCSymbol *LineStartSym = I->second.EmitCU(MCOS);
   // Handle the rest of the Compile Units.
-  for (++I; I != E; ++I)
-    I->second.EmitCU(MCOS);
+  for (const auto &CUIDTablePair : LineTables)
+    CUIDTablePair.second.EmitCU(MCOS);
+}
 
-  return LineStartSym;
+void MCDwarfDwoLineTable::Emit(MCStreamer &MCOS) const {
+  MCOS.EmitLabel(Header.Emit(&MCOS, None).second);
 }
 
 std::pair<MCSymbol *, MCSymbol *> MCDwarfLineTableHeader::Emit(MCStreamer *MCOS) const {
+  static const char StandardOpcodeLengths[] = {
+      0, // length of DW_LNS_copy
+      1, // length of DW_LNS_advance_pc
+      1, // length of DW_LNS_advance_line
+      1, // length of DW_LNS_set_file
+      1, // length of DW_LNS_set_column
+      0, // length of DW_LNS_negate_stmt
+      0, // length of DW_LNS_set_basic_block
+      0, // length of DW_LNS_const_add_pc
+      1, // length of DW_LNS_fixed_advance_pc
+      0, // length of DW_LNS_set_prologue_end
+      0, // length of DW_LNS_set_epilogue_begin
+      1  // DW_LNS_set_isa
+  };
+  assert(array_lengthof(StandardOpcodeLengths) == (DWARF2_LINE_OPCODE_BASE - 1));
+  return Emit(MCOS, StandardOpcodeLengths);
+}
+
+std::pair<MCSymbol *, MCSymbol *>
+MCDwarfLineTableHeader::Emit(MCStreamer *MCOS,
+                             ArrayRef<char> StandardOpcodeLengths) const {
+
   MCContext &context = MCOS->getContext();
 
   // Create a symbol at the beginning of the line table.
@@ -260,21 +284,11 @@ std::pair<MCSymbol *, MCSymbol *> MCDwarfLineTableHeader::Emit(MCStreamer *MCOS)
   MCOS->EmitIntValue(DWARF2_LINE_DEFAULT_IS_STMT, 1);
   MCOS->EmitIntValue(DWARF2_LINE_BASE, 1);
   MCOS->EmitIntValue(DWARF2_LINE_RANGE, 1);
-  MCOS->EmitIntValue(DWARF2_LINE_OPCODE_BASE, 1);
+  MCOS->EmitIntValue(StandardOpcodeLengths.size() + 1, 1);
 
   // Standard opcode lengths
-  MCOS->EmitIntValue(0, 1); // length of DW_LNS_copy
-  MCOS->EmitIntValue(1, 1); // length of DW_LNS_advance_pc
-  MCOS->EmitIntValue(1, 1); // length of DW_LNS_advance_line
-  MCOS->EmitIntValue(1, 1); // length of DW_LNS_set_file
-  MCOS->EmitIntValue(1, 1); // length of DW_LNS_set_column
-  MCOS->EmitIntValue(0, 1); // length of DW_LNS_negate_stmt
-  MCOS->EmitIntValue(0, 1); // length of DW_LNS_set_basic_block
-  MCOS->EmitIntValue(0, 1); // length of DW_LNS_const_add_pc
-  MCOS->EmitIntValue(1, 1); // length of DW_LNS_fixed_advance_pc
-  MCOS->EmitIntValue(0, 1); // length of DW_LNS_set_prologue_end
-  MCOS->EmitIntValue(0, 1); // length of DW_LNS_set_epilogue_begin
-  MCOS->EmitIntValue(1, 1); // DW_LNS_set_isa
+  for (char Length : StandardOpcodeLengths)
+    MCOS->EmitIntValue(Length, 1);
 
   // Put out the directory and file tables.
 
@@ -287,6 +301,7 @@ std::pair<MCSymbol *, MCSymbol *> MCDwarfLineTableHeader::Emit(MCStreamer *MCOS)
 
   // Second the file table.
   for (unsigned i = 1; i < MCDwarfFiles.size(); i++) {
+    assert(!MCDwarfFiles[i].Name.empty());
     MCOS->EmitBytes(MCDwarfFiles[i].Name); // FileName
     MCOS->EmitBytes(StringRef("\0", 1)); // the null term. of the string
     // the Directory num
@@ -303,10 +318,8 @@ std::pair<MCSymbol *, MCSymbol *> MCDwarfLineTableHeader::Emit(MCStreamer *MCOS)
   return std::make_pair(LineStartSym, LineEndSym);
 }
 
-const MCSymbol *MCDwarfLineTable::EmitCU(MCStreamer *MCOS) const {
-  MCSymbol *LineStartSym;
-  MCSymbol *LineEndSym;
-  std::tie(LineStartSym, LineEndSym) = Header.Emit(MCOS);
+void MCDwarfLineTable::EmitCU(MCStreamer *MCOS) const {
+  MCSymbol *LineEndSym = Header.Emit(MCOS).second;
 
   // Put out the line tables.
   for (const auto &LineSec : MCLineSections.getMCLineEntries())
@@ -327,16 +340,32 @@ const MCSymbol *MCDwarfLineTable::EmitCU(MCStreamer *MCOS) const {
   // This is the end of the section, so set the value of the symbol at the end
   // of this section (that was used in a previous expression).
   MCOS->EmitLabel(LineEndSym);
-
-  return LineStartSym;
 }
 
-unsigned MCDwarfLineTable::getFile(StringRef Directory, StringRef FileName,
+unsigned MCDwarfLineTable::getFile(StringRef &Directory, StringRef &FileName,
                                    unsigned FileNumber) {
   return Header.getFile(Directory, FileName, FileNumber);
 }
 
-unsigned MCDwarfLineTableHeader::getFile(StringRef Directory, StringRef FileName, unsigned FileNumber) {
+unsigned MCDwarfLineTableHeader::getFile(StringRef &Directory,
+                                         StringRef &FileName,
+                                         unsigned FileNumber) {
+  if (Directory == CompilationDir)
+    Directory = "";
+  if (FileName.empty()) {
+    FileName = "<stdin>";
+    Directory = "";
+  }
+  assert(!FileName.empty());
+  if (FileNumber == 0) {
+    FileNumber = SourceIdMap.size() + 1;
+    assert((MCDwarfFiles.empty() || FileNumber == MCDwarfFiles.size()) &&
+           "Don't mix autonumbered and explicit numbered line table usage");
+    StringMapEntry<unsigned> &Ent = SourceIdMap.GetOrCreateValue(
+        (Directory + Twine('\0') + FileName).str(), FileNumber);
+    if (Ent.getValue() != FileNumber)
+      return Ent.getValue();
+  }
   // Make space for this FileNumber in the MCDwarfFiles vector if needed.
   MCDwarfFiles.resize(FileNumber + 1);
 
@@ -584,7 +613,7 @@ static void EmitGenDwarfAranges(MCStreamer *MCOS,
     context.getGenDwarfSectionStartSym(), MCSymbolRefExpr::VK_None, context);
   const MCExpr *Size = MakeStartMinusEndExpr(*MCOS,
     *context.getGenDwarfSectionStartSym(), *SectionEndSym, 0);
-  MCOS->EmitAbsValue(Addr, AddrSize);
+  MCOS->EmitValue(Addr, AddrSize);
   MCOS->EmitAbsValue(Size, AddrSize);
 
   // And finally the pair of terminating zeros.
@@ -647,12 +676,12 @@ static void EmitGenDwarfInfo(MCStreamer *MCOS,
   // AT_low_pc, the first address of the default .text section.
   const MCExpr *Start = MCSymbolRefExpr::Create(
     context.getGenDwarfSectionStartSym(), MCSymbolRefExpr::VK_None, context);
-  MCOS->EmitAbsValue(Start, AddrSize);
+  MCOS->EmitValue(Start, AddrSize);
 
   // AT_high_pc, the last address of the default .text section.
   const MCExpr *End = MCSymbolRefExpr::Create(
     context.getGenDwarfSectionEndSym(), MCSymbolRefExpr::VK_None, context);
-  MCOS->EmitAbsValue(End, AddrSize);
+  MCOS->EmitValue(End, AddrSize);
 
   // AT_name, the name of the source file.  Reconstruct from the first directory
   // and file table entries.
@@ -721,7 +750,7 @@ static void EmitGenDwarfInfo(MCStreamer *MCOS,
     // AT_low_pc, start address of the label.
     const MCExpr *AT_low_pc = MCSymbolRefExpr::Create(Entry->getLabel(),
                                              MCSymbolRefExpr::VK_None, context);
-    MCOS->EmitAbsValue(AT_low_pc, AddrSize);
+    MCOS->EmitValue(AT_low_pc, AddrSize);
 
     // DW_AT_prototyped, a one byte flag value of 0 saying we have no prototype.
     MCOS->EmitIntValue(0, 1);
@@ -752,14 +781,15 @@ static void EmitGenDwarfInfo(MCStreamer *MCOS,
 // When generating dwarf for assembly source files this emits the Dwarf
 // sections.
 //
-void MCGenDwarfInfo::Emit(MCStreamer *MCOS, const MCSymbol *LineSectionSymbol) {
+void MCGenDwarfInfo::Emit(MCStreamer *MCOS) {
   // Create the dwarf sections in this order (.debug_line already created).
   MCContext &context = MCOS->getContext();
   const MCAsmInfo *AsmInfo = context.getAsmInfo();
   bool CreateDwarfSectionSymbols =
       AsmInfo->doesDwarfUseRelocationsAcrossSections();
-  if (!CreateDwarfSectionSymbols)
-    LineSectionSymbol = NULL;
+  MCSymbol *LineSectionSymbol = nullptr;
+  if (CreateDwarfSectionSymbols)
+    LineSectionSymbol = MCOS->getDwarfLineTableSymbol(0);
   MCSymbol *AbbrevSectionSymbol = NULL;
   MCSymbol *InfoSectionSymbol = NULL;
   MCOS->SwitchSection(context.getObjectFileInfo()->getDwarfInfoSection());
@@ -1467,6 +1497,7 @@ void MCDwarfFrameEmitter::Emit(MCStreamer &Streamer, MCAsmBackend *MAB,
   ArrayRef<MCDwarfFrameInfo> FrameArray = Streamer.getFrameInfos();
 
   // Emit the compact unwind info if available.
+  bool NeedsEHFrameSection = !MOFI->getSupportsCompactUnwindWithoutEHFrame();
   if (IsEH && MOFI->getCompactUnwindSection()) {
     bool SectionEmitted = false;
     for (unsigned i = 0, n = FrameArray.size(); i < n; ++i) {
@@ -1477,13 +1508,19 @@ void MCDwarfFrameEmitter::Emit(MCStreamer &Streamer, MCAsmBackend *MAB,
         Streamer.EmitValueToAlignment(Context.getAsmInfo()->getPointerSize());
         SectionEmitted = true;
       }
+      NeedsEHFrameSection |=
+        Frame.CompactUnwindEncoding ==
+          MOFI->getCompactUnwindDwarfEHFrameOnly();
       Emitter.EmitCompactUnwind(Streamer, Frame);
     }
   }
 
+  if (!NeedsEHFrameSection) return;
+
   const MCSection &Section =
     IsEH ? *const_cast<MCObjectFileInfo*>(MOFI)->getEHFrameSection() :
            *MOFI->getDwarfFrameSection();
+
   Streamer.SwitchSection(&Section);
   MCSymbol *SectionStart = Context.CreateTempSymbol();
   Streamer.EmitLabel(SectionStart);
@@ -1493,8 +1530,22 @@ void MCDwarfFrameEmitter::Emit(MCStreamer &Streamer, MCAsmBackend *MAB,
   DenseMap<CIEKey, const MCSymbol*> CIEStarts;
 
   const MCSymbol *DummyDebugKey = NULL;
+  NeedsEHFrameSection = !MOFI->getSupportsCompactUnwindWithoutEHFrame();
   for (unsigned i = 0, n = FrameArray.size(); i < n; ++i) {
     const MCDwarfFrameInfo &Frame = FrameArray[i];
+
+    // Emit the label from the previous iteration
+    if (FDEEnd) {
+      Streamer.EmitLabel(FDEEnd);
+      FDEEnd = NULL;
+    }
+
+    if (!NeedsEHFrameSection && Frame.CompactUnwindEncoding !=
+          MOFI->getCompactUnwindDwarfEHFrameOnly())
+      // Don't generate an EH frame if we don't need one. I.e., it's taken care
+      // of by the compact unwind encoding.
+      continue;
+
     CIEKey Key(Frame.Personality, Frame.PersonalityEncoding,
                Frame.LsdaEncoding, Frame.IsSignalFrame, Frame.IsSimple);
     const MCSymbol *&CIEStart = IsEH ? CIEStarts[Key] : DummyDebugKey;
@@ -1506,9 +1557,6 @@ void MCDwarfFrameEmitter::Emit(MCStreamer &Streamer, MCAsmBackend *MAB,
                                   Frame.IsSimple);
 
     FDEEnd = Emitter.EmitFDE(Streamer, *CIEStart, Frame);
-
-    if (i != n - 1)
-      Streamer.EmitLabel(FDEEnd);
   }
 
   Streamer.EmitValueToAlignment(Context.getAsmInfo()->getPointerSize());

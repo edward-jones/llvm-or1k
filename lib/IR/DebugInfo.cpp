@@ -429,8 +429,10 @@ static bool fieldIsTypeRef(const MDNode *DbgNode, unsigned Elt) {
 /// Check if a value can be a ScopeRef.
 static bool isScopeRef(const Value *Val) {
   return !Val ||
-         (isa<MDString>(Val) && !cast<MDString>(Val)->getString().empty()) ||
-         (isa<MDNode>(Val) && DIScope(cast<MDNode>(Val)).isScope());
+    (isa<MDString>(Val) && !cast<MDString>(Val)->getString().empty()) ||
+    // Not checking for Val->isScope() here, because it would work
+    // only for lexical scopes and not all subclasses of DIScope.
+    isa<MDNode>(Val);
 }
 
 /// Check if a field at position Elt of a MDNode can be a ScopeRef.
@@ -541,10 +543,11 @@ bool DIGlobalVariable::Verify() const {
 
   if (getDisplayName().empty())
     return false;
-  // Make sure context @ field 2 and type @ field 8 are MDNodes.
+  // Make sure context @ field 2 is an MDNode.
   if (!fieldIsMDNode(DbgNode, 2))
     return false;
-  if (!fieldIsMDNode(DbgNode, 8))
+  // Make sure that type @ field 8 is a DITypeRef.
+  if (!fieldIsTypeRef(DbgNode, 8))
     return false;
   // Make sure StaticDataMemberDeclaration @ field 12 is MDNode.
   if (!fieldIsMDNode(DbgNode, 12))
@@ -558,10 +561,11 @@ bool DIVariable::Verify() const {
   if (!isVariable())
     return false;
 
-  // Make sure context @ field 1 and type @ field 5 are MDNodes.
+  // Make sure context @ field 1 is an MDNode.
   if (!fieldIsMDNode(DbgNode, 1))
     return false;
-  if (!fieldIsMDNode(DbgNode, 5))
+  // Make sure that type @ field 5 is a DITypeRef.
+  if (!fieldIsTypeRef(DbgNode, 5))
     return false;
   return DbgNode->getNumOperands() >= 8;
 }
@@ -999,7 +1003,7 @@ void DebugInfoFinder::processModule(const Module &M) {
         DIGlobalVariable DIG(GVs.getElement(i));
         if (addGlobalVariable(DIG)) {
           processScope(DIG.getContext());
-          processType(DIG.getType());
+          processType(DIG.getType().resolve(TypeIdentifierMap));
         }
       }
       DIArray SPs = CU.getSubprograms();
@@ -1014,7 +1018,7 @@ void DebugInfoFinder::processModule(const Module &M) {
       DIArray Imports = CU.getImportedEntities();
       for (unsigned i = 0, e = Imports.getNumElements(); i != e; ++i) {
         DIImportedEntity Import = DIImportedEntity(Imports.getElement(i));
-        DIDescriptor Entity = Import.getEntity();
+        DIDescriptor Entity = Import.getEntity().resolve(TypeIdentifierMap);
         if (Entity.isType())
           processType(DIType(Entity));
         else if (Entity.isSubprogram())
@@ -1085,18 +1089,6 @@ void DebugInfoFinder::processScope(DIScope Scope) {
   }
 }
 
-/// processLexicalBlock
-void DebugInfoFinder::processLexicalBlock(DILexicalBlock LB) {
-  DIScope Context = LB.getContext();
-  if (Context.isLexicalBlock())
-    return processLexicalBlock(DILexicalBlock(Context));
-  else if (Context.isLexicalBlockFile()) {
-    DILexicalBlockFile DBF = DILexicalBlockFile(Context);
-    return processLexicalBlock(DILexicalBlock(DBF.getScope()));
-  } else
-    return processSubprogram(DISubprogram(Context));
-}
-
 /// processSubprogram - Process DISubprogram.
 void DebugInfoFinder::processSubprogram(DISubprogram SP) {
   if (!addSubprogram(SP))
@@ -1133,7 +1125,7 @@ void DebugInfoFinder::processDeclare(const Module &M,
   if (!NodesSeen.insert(DV))
     return;
   processScope(DIVariable(N).getContext());
-  processType(DIVariable(N).getType());
+  processType(DIVariable(N).getType().resolve(TypeIdentifierMap));
 }
 
 void DebugInfoFinder::processValue(const Module &M, const DbgValueInst *DVI) {
@@ -1149,7 +1141,7 @@ void DebugInfoFinder::processValue(const Module &M, const DbgValueInst *DVI) {
   if (!NodesSeen.insert(DV))
     return;
   processScope(DIVariable(N).getContext());
-  processType(DIVariable(N).getType());
+  processType(DIVariable(N).getType().resolve(TypeIdentifierMap));
 }
 
 /// addType - Add type into Tys.

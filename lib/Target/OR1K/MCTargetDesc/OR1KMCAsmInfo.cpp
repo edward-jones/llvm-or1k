@@ -21,4 +21,9 @@ OR1KMCAsmInfo::OR1KMCAsmInfo(StringRef TT) {
 
   // OR1K assembly requires ".section" before ".bss"
   UsesELFSectionDirectiveForBSS = true;
+
+  // Enable debug information
+  SupportsDebugInformation = true;
+  DwarfRegNumForCFI = true;
+  MinInstAlignment = 4;
 }

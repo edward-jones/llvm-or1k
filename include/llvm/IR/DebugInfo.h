@@ -18,6 +18,7 @@
 #define LLVM_IR_DEBUGINFO_H
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/iterator_range.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -196,6 +197,13 @@ typedef DIRef<DIScope> DIScopeRef;
 typedef DIRef<DIType> DITypeRef;
 
 /// DIScope - A base class for various scopes.
+///
+/// Although, implementation-wise, DIScope is the parent class of most
+/// other DIxxx classes, including DIType and its descendants, most of
+/// DIScope's descendants are not a substitutable subtype of
+/// DIScope. The DIDescriptor::isScope() method only is true for
+/// DIScopes that are scopes in the strict lexical scope sense
+/// (DICompileUnit, DISubprogram, etc.), but not for, e.g., a DIType.
 class DIScope : public DIDescriptor {
 protected:
   friend class DIDescriptor;
@@ -224,6 +232,7 @@ template <typename T> class DIRef {
   friend DescTy DIDescriptor::getFieldAs(unsigned Elt) const;
   friend DIScopeRef DIScope::getContext() const;
   friend DIScopeRef DIScope::getRef() const;
+  friend class DIType;
 
   /// Val can be either a MDNode or a MDString, in the latter,
   /// MDString specifies the type identifier.
@@ -284,6 +293,11 @@ protected:
 
 public:
   explicit DIType(const MDNode *N = 0) : DIScope(N) {}
+  operator DITypeRef () const {
+    assert(isType() &&
+           "constructing DITypeRef from an MDNode that is not a type");
+    return DITypeRef(&*getRef());
+  }
 
   /// Verify - Verify that a type descriptor is well formed.
   bool Verify() const;
@@ -615,7 +629,7 @@ public:
   }
 
   unsigned getLineNumber() const { return getUnsignedField(7); }
-  DIType getType() const { return getFieldAs<DIType>(8); }
+  DITypeRef getType() const { return getFieldAs<DITypeRef>(8); }
   unsigned isLocalToUnit() const { return getUnsignedField(9); }
   unsigned isDefinition() const { return getUnsignedField(10); }
 
@@ -646,7 +660,7 @@ public:
     unsigned L = getUnsignedField(4);
     return L >> 24;
   }
-  DIType getType() const { return getFieldAs<DIType>(5); }
+  DITypeRef getType() const { return getFieldAs<DITypeRef>(5); }
 
   /// isArtificial - Return true if this variable is marked as "artificial".
   bool isArtificial() const {
@@ -679,7 +693,9 @@ public:
 
   /// isBlockByrefVariable - Return true if the variable was declared as
   /// a "__block" variable (Apple Blocks).
-  bool isBlockByrefVariable() const { return getType().isBlockByrefStruct(); }
+  bool isBlockByrefVariable(const DITypeIdentifierMap &Map) const {
+    return (getType().resolve(Map)).isBlockByrefStruct();
+  }
 
   /// isInlinedFnArgument - Return true if this variable provides debugging
   /// information for an inlined function arguments.
@@ -756,6 +772,8 @@ public:
     return (getUnsignedField(6) & dwarf::DW_APPLE_PROPERTY_nonatomic) != 0;
   }
 
+  /// Objective-C doesn't have an ODR, so there is no benefit in storing
+  /// the type as a DITypeRef here.
   DIType getType() const { return getFieldAs<DIType>(7); }
 
   /// Verify - Verify that a derived type descriptor is well formed.
@@ -770,7 +788,7 @@ class DIImportedEntity : public DIDescriptor {
 public:
   explicit DIImportedEntity(const MDNode *N) : DIDescriptor(N) {}
   DIScope getContext() const { return getFieldAs<DIScope>(1); }
-  DIDescriptor getEntity() const { return getFieldAs<DIDescriptor>(2); }
+  DIScopeRef getEntity() const { return getFieldAs<DIScopeRef>(2); }
   unsigned getLineNumber() const { return getUnsignedField(3); }
   StringRef getName() const { return getStringField(4); }
   bool Verify() const;
@@ -843,9 +861,6 @@ private:
   /// processType - Process DIType.
   void processType(DIType DT);
 
-  /// processLexicalBlock - Process DILexicalBlock.
-  void processLexicalBlock(DILexicalBlock LB);
-
   /// processSubprogram - Process DISubprogram.
   void processSubprogram(DISubprogram SP);
 
@@ -866,17 +881,31 @@ private:
   bool addScope(DIScope Scope);
 
 public:
-  typedef SmallVectorImpl<MDNode *>::const_iterator iterator;
-  iterator compile_unit_begin() const { return CUs.begin(); }
-  iterator compile_unit_end() const { return CUs.end(); }
-  iterator subprogram_begin() const { return SPs.begin(); }
-  iterator subprogram_end() const { return SPs.end(); }
-  iterator global_variable_begin() const { return GVs.begin(); }
-  iterator global_variable_end() const { return GVs.end(); }
-  iterator type_begin() const { return TYs.begin(); }
-  iterator type_end() const { return TYs.end(); }
-  iterator scope_begin() const { return Scopes.begin(); }
-  iterator scope_end() const { return Scopes.end(); }
+  typedef SmallVectorImpl<DICompileUnit>::const_iterator compile_unit_iterator;
+  typedef SmallVectorImpl<DISubprogram>::const_iterator subprogram_iterator;
+  typedef SmallVectorImpl<DIGlobalVariable>::const_iterator global_variable_iterator;
+  typedef SmallVectorImpl<DIType>::const_iterator type_iterator;
+  typedef SmallVectorImpl<DIScope>::const_iterator scope_iterator;
+
+  iterator_range<compile_unit_iterator> compile_units() const {
+    return iterator_range<compile_unit_iterator>(CUs.begin(), CUs.end());
+  }
+
+  iterator_range<subprogram_iterator> subprograms() const {
+    return iterator_range<subprogram_iterator>(SPs.begin(), SPs.end());
+  }
+
+  iterator_range<global_variable_iterator> global_variables() const {
+    return iterator_range<global_variable_iterator>(GVs.begin(), GVs.end());
+  }
+
+  iterator_range<type_iterator> types() const {
+    return iterator_range<type_iterator>(TYs.begin(), TYs.end());
+  }
+
+  iterator_range<scope_iterator> scopes() const {
+    return iterator_range<scope_iterator>(Scopes.begin(), Scopes.end());
+  }
 
   unsigned compile_unit_count() const { return CUs.size(); }
   unsigned global_variable_count() const { return GVs.size(); }
@@ -885,11 +914,11 @@ public:
   unsigned scope_count() const { return Scopes.size(); }
 
 private:
-  SmallVector<MDNode *, 8> CUs;    // Compile Units
-  SmallVector<MDNode *, 8> SPs;    // Subprograms
-  SmallVector<MDNode *, 8> GVs;    // Global Variables;
-  SmallVector<MDNode *, 8> TYs;    // Types
-  SmallVector<MDNode *, 8> Scopes; // Scopes
+  SmallVector<DICompileUnit, 8> CUs;    // Compile Units
+  SmallVector<DISubprogram, 8> SPs;    // Subprograms
+  SmallVector<DIGlobalVariable, 8> GVs;    // Global Variables;
+  SmallVector<DIType, 8> TYs;    // Types
+  SmallVector<DIScope, 8> Scopes; // Scopes
   SmallPtrSet<MDNode *, 64> NodesSeen;
   DITypeIdentifierMap TypeIdentifierMap;
   /// Specify if TypeIdentifierMap is initialized.

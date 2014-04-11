@@ -24,8 +24,7 @@ namespace {
     virtual ~OR1KELFObjectWriter();
   protected:
     virtual unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
-                                  bool IsPCRel, bool IsRelocWithSymbol,
-                                  int64_t Addend) const;
+                                  bool IsPCRel) const;
   };
 }
 
@@ -37,9 +36,7 @@ OR1KELFObjectWriter::~OR1KELFObjectWriter() {}
 
 unsigned OR1KELFObjectWriter::GetRelocType(const MCValue &Target,
                                            const MCFixup &Fixup,
-                                           bool IsPCRel,
-                                           bool IsRelocWithSymbol,
-                                           int64_t Addend) const {
+                                           bool IsPCRel) const {
   unsigned Type;
   unsigned Kind = (unsigned)Fixup.getKind();
   switch (Kind) {

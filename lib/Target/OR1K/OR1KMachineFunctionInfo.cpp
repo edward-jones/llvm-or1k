@@ -12,12 +12,3 @@
 using namespace llvm;
 
 void OR1KMachineFunctionInfo::anchor() { }
-
-unsigned OR1KMachineFunctionInfo::getGlobalBaseReg() {
-  // Return if it has already been initialized.
-  if (GlobalBaseReg)
-    return GlobalBaseReg;
-
-  return GlobalBaseReg = MF.getRegInfo()
-    .createVirtualRegister(&OR1K::GPRRegClass);
-}

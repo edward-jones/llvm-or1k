@@ -54,7 +54,10 @@ namespace llvm {
 
       // Get the Higher/Lower 16 bits from a 32-bit immediate
       HI,
-      LO
+      LO,
+
+      // Global Pointer value
+      GLOBAL_BASE_REG
     };
   }
 

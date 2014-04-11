@@ -14,6 +14,7 @@
 #define DEBUG_TYPE "mccodeemitter"
 #include "MCTargetDesc/OR1KBaseInfo.h"
 #include "MCTargetDesc/OR1KFixupKinds.h"
+#include "MCTargetDesc/OR1KMCExpr.h"
 #include "MCTargetDesc/OR1KMCTargetDesc.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCFixup.h"
@@ -100,6 +101,22 @@ MCCodeEmitter *llvm::createOR1KMCCodeEmitter(const MCInstrInfo &MCII,
   return new OR1KMCCodeEmitter(MCII, STI, Ctx);
 }
 
+static OR1K::Fixups getFixupKind(OR1KMCExpr::VariantKind VK) {
+  switch (VK) {
+  case OR1KMCExpr::VK_OR1K_REL26: return OR1K::fixup_OR1K_REL26;
+  case OR1KMCExpr::VK_OR1K_ABS_HI16: return OR1K::fixup_OR1K_HI16_INSN;
+  case OR1KMCExpr::VK_OR1K_ABS_LO16: return OR1K::fixup_OR1K_LO16_INSN;
+  case OR1KMCExpr::VK_OR1K_PLT26: return OR1K::fixup_OR1K_PLT26;
+  case OR1KMCExpr::VK_OR1K_GOT16: return OR1K::fixup_OR1K_GOT16;
+  case OR1KMCExpr::VK_OR1K_GOTPC_HI16: return OR1K::fixup_OR1K_GOTPC_HI16;
+  case OR1KMCExpr::VK_OR1K_GOTPC_LO16: return OR1K::fixup_OR1K_GOTPC_LO16;
+  case OR1KMCExpr::VK_OR1K_GOTOFF_HI16: return OR1K::fixup_OR1K_GOTOFF_HI16;
+  case OR1KMCExpr::VK_OR1K_GOTOFF_LO16: return OR1K::fixup_OR1K_GOTOFF_LO16;
+  default: break;
+  }
+  llvm_unreachable("Unknown fixup!");
+}
+
 /// getMachineOpValue - Return binary encoding of operand. If the machine
 /// operand requires relocation, record the relocation and return zero.
 unsigned OR1KMCCodeEmitter::
@@ -114,51 +131,9 @@ getMachineOpValue(const MCInst &MI, const MCOperand &MO,
   // MO must be an expression
   assert(MO.isExpr());
 
-  const MCExpr *Expr = MO.getExpr();
-  MCExpr::ExprKind Kind = Expr->getKind();
+  const OR1KMCExpr *Expr = cast<OR1KMCExpr>(MO.getExpr());
 
-  if (Kind == MCExpr::Binary) {
-    Expr = static_cast<const MCBinaryExpr*>(Expr)->getLHS();
-    Kind = Expr->getKind();
-  }
-
-  assert (Kind == MCExpr::SymbolRef);
-
-  OR1K::Fixups FixupKind = OR1K::Fixups(0);
-
-  switch(cast<MCSymbolRefExpr>(Expr)->getKind()) {
-    default: llvm_unreachable("Unknown fixup kind!");
-      break;
-    // FIXME: We shouldn't have VK_None at this point?
-    // Simple test seems to show that None here is REL26?
-    case MCSymbolRefExpr::VK_None:
-      FixupKind = OR1K::fixup_OR1K_REL26;
-      break;
-    case MCSymbolRefExpr::VK_OR1K_ABS_HI:
-      FixupKind = OR1K::fixup_OR1K_HI16_INSN;
-      break;
-    case MCSymbolRefExpr::VK_OR1K_ABS_LO:
-      FixupKind = OR1K::fixup_OR1K_LO16_INSN;
-      break;
-    case MCSymbolRefExpr::VK_OR1K_PLT:
-      FixupKind = OR1K::fixup_OR1K_PLT26;
-      break;
-    case MCSymbolRefExpr::VK_OR1K_GOTPCHI:
-      FixupKind = OR1K::fixup_OR1K_GOTPC_HI16;
-      break;
-    case MCSymbolRefExpr::VK_OR1K_GOTPCLO:
-      FixupKind = OR1K::fixup_OR1K_GOTPC_LO16;
-      break;
-    case MCSymbolRefExpr::VK_OR1K_GOTOFFHI:
-      FixupKind = OR1K::fixup_OR1K_GOTOFF_HI16;
-      break;
-    case MCSymbolRefExpr::VK_OR1K_GOTOFFLO:
-      FixupKind = OR1K::fixup_OR1K_GOTOFF_LO16;
-      break;
-    case MCSymbolRefExpr::VK_OR1K_GOT:
-      FixupKind = OR1K::fixup_OR1K_GOT16;
-      break;
-  }
+  OR1K::Fixups FixupKind = getFixupKind(Expr->getVariantKind());
 
   // Push fixup (all info is contained within)
   Fixups.push_back(MCFixup::Create(0, MO.getExpr(), MCFixupKind(FixupKind)));
@@ -179,17 +154,26 @@ EncodeInstruction(const MCInst &Inst, raw_ostream &OS,
 }
 
 // Encode OR1K Memory Operand
-unsigned OR1KMCCodeEmitter::
-getMemoryOpValue(const MCInst &MI, unsigned Op,
-  SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
-  unsigned encoding;
-  const MCOperand op1 = MI.getOperand(1);
-  assert(op1.isReg() && "First operand is not register.");
-  encoding = (Ctx.getRegisterInfo()->getEncodingValue(op1.getReg()) << 16);
-  MCOperand op2 = MI.getOperand(2);
-  assert(op2.isImm() && "Second operand is not immediate.");
-  encoding |= (static_cast<short>(op2.getImm()) & 0xffff);
-  return encoding;
+unsigned
+OR1KMCCodeEmitter::getMemoryOpValue(const MCInst &MI, unsigned Op,
+                                    SmallVectorImpl<MCFixup> &Fixups,
+                                    const MCSubtargetInfo &STI) const {
+  unsigned Encoding = 0;
+  unsigned BaseReg = MI.getOperand(1).getReg();
+  Encoding = Ctx.getRegisterInfo()->getEncodingValue(BaseReg) << 16;
+
+  const MCOperand MO = MI.getOperand(2);
+  if (MO.isImm())
+    return Encoding |= MO.getImm() & 0xffff;
+
+  const OR1KMCExpr *Expr = cast<OR1KMCExpr>(MO.getExpr());
+
+  OR1K::Fixups FixupKind = getFixupKind(Expr->getVariantKind());
+
+  // Push fixup (all info is contained within)
+  Fixups.push_back(MCFixup::Create(0, MO.getExpr(), MCFixupKind(FixupKind)));
+
+  return Encoding;
 }
 
 #include "OR1KGenMCCodeEmitter.inc"

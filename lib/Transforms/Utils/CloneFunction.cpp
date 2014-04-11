@@ -89,26 +89,28 @@ void llvm::CloneFunctionInto(Function *NewFunc, const Function *OldFunc,
     assert(VMap.count(I) && "No mapping from source argument specified!");
 #endif
 
+  // Copy all attributes other than those stored in the AttributeSet.  We need
+  // to remap the parameter indices of the AttributeSet.
+  AttributeSet NewAttrs = NewFunc->getAttributes();
+  NewFunc->copyAttributesFrom(OldFunc);
+  NewFunc->setAttributes(NewAttrs);
+
   AttributeSet OldAttrs = OldFunc->getAttributes();
   // Clone any argument attributes that are present in the VMap.
-  for (Function::const_arg_iterator I = OldFunc->arg_begin(),
-                                    E = OldFunc->arg_end();
-       I != E; ++I)
-    if (Argument *Anew = dyn_cast<Argument>(VMap[I])) {
+  for (const Argument &OldArg : OldFunc->args())
+    if (Argument *NewArg = dyn_cast<Argument>(VMap[&OldArg])) {
       AttributeSet attrs =
-          OldAttrs.getParamAttributes(I->getArgNo() + 1);
+          OldAttrs.getParamAttributes(OldArg.getArgNo() + 1);
       if (attrs.getNumSlots() > 0)
-        Anew->addAttr(attrs);
+        NewArg->addAttr(attrs);
     }
 
-  NewFunc->setAttributes(NewFunc->getAttributes()
-                         .addAttributes(NewFunc->getContext(),
-                                        AttributeSet::ReturnIndex,
-                                        OldAttrs.getRetAttributes()));
-  NewFunc->setAttributes(NewFunc->getAttributes()
-                         .addAttributes(NewFunc->getContext(),
-                                        AttributeSet::FunctionIndex,
-                                        OldAttrs.getFnAttributes()));
+  NewFunc->setAttributes(
+      NewFunc->getAttributes()
+          .addAttributes(NewFunc->getContext(), AttributeSet::ReturnIndex,
+                         OldAttrs.getRetAttributes())
+          .addAttributes(NewFunc->getContext(), AttributeSet::FunctionIndex,
+                         OldAttrs.getFnAttributes()));
 
   // Loop over all of the basic blocks in the function, cloning them as
   // appropriate.  Note that we save BE this way in order to handle cloning of
@@ -154,10 +156,7 @@ void llvm::CloneFunctionInto(Function *NewFunc, const Function *OldFunc,
 
 // Find the MDNode which corresponds to the DISubprogram data that described F.
 static MDNode* FindSubprogram(const Function *F, DebugInfoFinder &Finder) {
-  for (DebugInfoFinder::iterator I = Finder.subprogram_begin(),
-                                 E = Finder.subprogram_end();
-       I != E; ++I) {
-    DISubprogram Subprogram(*I);
+  for (DISubprogram Subprogram : Finder.subprograms()) {
     if (Subprogram.describes(F)) return Subprogram;
   }
   return NULL;
@@ -190,10 +189,7 @@ static void CloneDebugInfoMetadata(Function *NewFunc, const Function *OldFunc,
   VMap[OldFunc] = NewFunc;
   DISubprogram NewSubprogram(MapValue(OldSubprogramMDNode, VMap));
 
-  for (DebugInfoFinder::iterator CUIter = Finder.compile_unit_begin(),
-       CUEnd = Finder.compile_unit_end(); CUIter != CUEnd; ++CUIter) {
-    DICompileUnit CU(*CUIter);
-
+  for (DICompileUnit CU : Finder.compile_units()) {
     DIArray Subprograms(CU.getSubprograms());
 
     // If the compile unit's function list contains the old function, it should
