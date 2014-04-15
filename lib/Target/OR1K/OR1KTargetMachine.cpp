@@ -82,6 +82,5 @@ bool OR1KPassConfig::addPreEmitPass() {
 }
 
 bool OR1KPassConfig::addPreISel() {
-  addPass(createOR1KMACSubPass(getOR1KTargetMachine()));
   return true;
 }
