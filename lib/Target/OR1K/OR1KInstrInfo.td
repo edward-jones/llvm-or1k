@@ -227,7 +227,7 @@ multiclass SF<bits<5> op2Val, string asmstr, PatLeaf Cond> {
 }
 
 // l.sfxx instructions
-let Defs = [SR], hasSideEffects = 1 in {
+let Defs = [SR] in {
 defm SFEQ  : SF<0x0, "l.sfeq",  OR1K_CC_EQ>;
 defm SFNE  : SF<0x1, "l.sfne",  OR1K_CC_NE>;
 defm SFGTU : SF<0x2, "l.sfgtu", OR1K_CC_GTU>;

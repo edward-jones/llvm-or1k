@@ -91,7 +91,7 @@ class SetFlagFRR<bits<8> subOp, string asmstr, PatLeaf Cond, InstrItinClass itin
 }
 
 // FIXME: Do not use isCodeGenOnly = 1 to resolve conflicts
-let Defs = [SR], hasSideEffects = 1 in {
+let Defs = [SR] in {
   def SFEQrrf32 : SetFlagFRR<0x08, "lf.sfeq.s", OR1K_CC_EQ, II_SET_FLAG_S>;
   def SFNErrf32 : SetFlagFRR<0x09, "lf.sfne.s", OR1K_CC_NE, II_SET_FLAG_S>;
   def SFGTrrf32 : SetFlagFRR<0x0a, "lf.sfgt.s", OR1K_CC_GT, II_SET_FLAG_S>;
