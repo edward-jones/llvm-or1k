@@ -22,10 +22,6 @@ namespace llvm {
 /// OR1KMachineFunctionInfo - This class is derived from MachineFunction and
 /// contains private OR1K target-specific information for each MachineFunction.
 class OR1KMachineFunctionInfo : public MachineFunctionInfo {
-  virtual void anchor();
-
-  MachineFunction& MF;
-
   /// SRetReturnReg - OR1K ABI require that sret lowering includes
   /// returning the value of the returned struct in a register. This field
   /// holds the virtual register into which the sret argument is passed.
@@ -41,8 +37,7 @@ class OR1KMachineFunctionInfo : public MachineFunctionInfo {
 
 public:
   OR1KMachineFunctionInfo(MachineFunction &MF)
-    : MF(MF),
-      SRetReturnReg(0),
+    : SRetReturnReg(0),
       GlobalBaseReg(0),
       VarArgsFrameIndex(0) {}
 
