@@ -36,6 +36,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetLowering.h"
 using namespace llvm;
 
 OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm) :
@@ -1173,4 +1174,41 @@ OR1KTargetLowering::EmitInstrWithCustomInserter(MachineInstr *MI,
 
   MI->eraseFromParent();   // The pseudo instruction is gone now.
   return BB;
+}
+
+bool OR1KTargetLowering::isLegalAddImmediate(int64_t Imm) const {
+  // Immediates in add instruction are legal only if are at most 16 bits wide.
+  if ((Imm >> 16) == 0)
+    return true;
+
+  return false;
+}
+
+bool OR1KTargetLowering::isLegalICmpImmediate(int64_t Imm) const {
+  // If the CPU supports SetFlagIf with Immediate instructions and the immediate
+  // is at most 16 bits wide then it is legal.
+  if (Subtarget.hasSFII() && (Imm >> 16) == 0)
+    return true;
+
+  return false;
+}
+
+bool
+OR1KTargetLowering::isLegalAddressingMode(const AddrMode& AM, Type* Ty) const {
+  // No global is ever allowed as a base.
+  if (AM.BaseGV)
+    return false;
+
+  switch (AM.Scale) {
+  case 0: // "r+i" or just "i", depending on HasBaseReg.
+    break;
+  case 1:
+    if (!AM.HasBaseReg) // allow "r+i".
+      break;
+    return false; // disallow "r+r" or "r+r+i".
+  default:
+    return false;
+  }
+
+  return true;
 }

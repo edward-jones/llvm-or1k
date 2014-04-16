@@ -33,11 +33,11 @@ namespace llvm {
 namespace {
 
   class OR1KTTI final : public ImmutablePass, public TargetTransformInfo {
+    const OR1KTargetMachine *TM;
     const OR1KSubtarget *ST;
     const OR1KTargetLowering *TLI;
 
   public:
-
     OR1KTTI() : ImmutablePass(ID), TM(0), ST(0), TLI(0) {
       llvm_unreachable("This pass cannot be directly constructed");
     }
@@ -109,9 +109,9 @@ unsigned OR1KTTI::getIntImmCost(const APInt &Imm, Type *Ty) const {
   assert(Ty->isIntegerTy());
 
   unsigned Bits = Ty->getPrimitiveSizeInBits();
-  if (Bits < 16) {
+  if (Bits == 16) {
     return 1;
-  } else if (Bits < 32) {
+  } else if (Bits == 32) {
     return 2;
   } else {
     return 4;

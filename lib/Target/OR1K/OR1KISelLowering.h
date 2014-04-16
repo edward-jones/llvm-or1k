@@ -144,6 +144,10 @@ namespace llvm {
                         const SmallVectorImpl<ISD::OutputArg> &Outs,
                         const SmallVectorImpl<SDValue> &OutVals,
                         SDLoc dl, SelectionDAG &DAG) const;
+
+    bool isLegalAddImmediate(int64_t) const override;
+    bool isLegalICmpImmediate(int64_t) const override;
+    bool isLegalAddressingMode(const AddrMode& AM, Type* Ty) const override;
   };
 } // namespace llvm
 
