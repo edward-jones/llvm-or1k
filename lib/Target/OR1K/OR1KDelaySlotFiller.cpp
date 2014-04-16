@@ -234,7 +234,7 @@ void Filler::insertDefsUses(MachineBasicBlock::instr_iterator MI,
     if (!MO.isReg() || !(Reg = MO.getReg()))
       continue;
 
-    if (MO.isDef())
+    if (MO.isDef() && !MO.isDead())
       RegDefs.insert(Reg);
     else if (MO.isUse())
       RegUses.insert(Reg);
