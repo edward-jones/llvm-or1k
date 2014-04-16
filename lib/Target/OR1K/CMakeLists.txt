@@ -27,6 +27,7 @@ add_llvm_target(OR1KCodeGen
   OR1KMACSub.cpp
   OR1KFunnyNopReplacer.cpp
   OR1KTargetTransformInfo.cpp
+  OR1KLoopStrengthReduce.cpp
   )
 
 add_subdirectory(InstPrinter)

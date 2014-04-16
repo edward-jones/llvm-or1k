@@ -44,6 +44,10 @@ FunctionPass* createOR1KFunnyNOPReplacer();
 /// Target Transformation Info pass.
 ImmutablePass *createOR1KTargetTransformInfoPass(const OR1KTargetMachine *TM);
 
+/// createOR1KLoopStrengthReduction - This pass creates an alternative pass
+/// for LLVM's LSR
+Pass *createOR1KLoopStrengthReduction();
+
 extern Target TheOR1KTarget;
 } // end namespace llvm;
 
