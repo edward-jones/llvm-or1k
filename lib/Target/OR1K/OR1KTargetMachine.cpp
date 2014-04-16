@@ -53,9 +53,9 @@ public:
     return getTM<OR1KTargetMachine>();
   }
 
-  virtual bool addInstSelector();
-  virtual bool addPreEmitPass();
-  virtual bool addPreISel();
+  bool addInstSelector() override;
+  bool addPreEmitPass() override;
+  bool addPreISel() override;
 };
 } // namespace
 
