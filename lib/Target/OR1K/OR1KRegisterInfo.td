@@ -11,17 +11,23 @@
 //  Declarations that describe the OR1K register file
 //===----------------------------------------------------------------------===//
 
-class Ri<bits<16> Enc, string n> : Register<n> {
-  let HWEncoding = Enc;
+let Namespace = "OR1K" in {
+  def sub_even : SubRegIndex<32>;
+  def sub_odd  : SubRegIndex<32>;
+}
+
+class OR1KReg<string n> : Register<n> {
   let Namespace = "OR1K";
 }
 
-let Namespace = "OR1K" in {
-def sub_even : SubRegIndex<32>;
-def sub_odd  : SubRegIndex<32>;
+//===----------------------------------------------------------------------===//
+//  GPR - General purpose registers
+//===----------------------------------------------------------------------===//
+
+class Ri<bits<16> num, string n> : OR1KReg<n> {
+  let HWEncoding = num;
 }
 
-// Integer registers
 def R0 : Ri< 0, "r0">, DwarfRegNum<[0]>;
 def R1 : Ri< 1, "r1">, DwarfRegNum<[1]>;
 def R2 : Ri< 2, "r2">, DwarfRegNum<[2]>;
@@ -55,25 +61,38 @@ def R29 : Ri<29, "r29">, DwarfRegNum<[29]>;
 def R30 : Ri<30, "r30">, DwarfRegNum<[30]>;
 def R31 : Ri<31, "r31">, DwarfRegNum<[31]>;
 
-class SPRi<bits<5> group, bits<11> num, string n> : Register<n> {
-  bits<16> Enc;
-
-  let Enc{15-11} = group;
-  let Enc{10-0} = num;
-
-  let HWEncoding = Enc;
-  let Namespace = "OR1K";
-}
-
-// Special purpose registers
-def SR    : SPRi<0 ,17, "">;
-def MACLO : SPRi<5, 1, "">;
-def MACHI : SPRi<5, 2, "">;
-
-// Register classes.
 def GPR : RegisterClass<"OR1K", [i32,f32], 32, (sequence "R%u", 0, 31)>;
 
-def SPR : RegisterClass<"OR1K", [i32], 32, (add SR, MACLO, MACHI)> {
-  let CopyCost = -1;  // Don't allow copying of special purpose registers.
+//===----------------------------------------------------------------------===//
+//  SPR - Special purpose registers
+//===----------------------------------------------------------------------===//
+
+class SPReg<bits<5> group, bits<11> num, string n> : OR1KReg<n> {
+  let HWEncoding{15-11} = group;
+  let HWEncoding{10-0} = num;
+}
+
+def MACLO : SPReg<5, 1, "">;
+def MACHI : SPReg<5, 2, "">;
+
+def SPR : RegisterClass<"OR1K", [i32], 32, (add MACLO, MACHI)> {
+  // special register cannot be directly written/read and are not addressable
+  let CopyCost = -1;
+  let isAllocatable = 0;
+}
+
+//===----------------------------------------------------------------------===//
+//  Supervisor register
+//===----------------------------------------------------------------------===//
+
+// Only the significative bits of the supervisor register SR are modeled
+
+// Supervisor register class.
+def SR_F  : OR1KReg<"SR_F">;
+def SR_CY : OR1KReg<"SR_CY">;
+def SR_OV : OR1KReg<"SR_OV">;
+
+def SR : RegisterClass<"OR1K", [i32], 32, (add SR_F, SR_CY, SR_OV)> {
+  let CopyCost = -1;
   let isAllocatable = 0;
 }
