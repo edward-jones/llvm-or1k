@@ -40,6 +40,10 @@ LoopPass* createOR1KMACSubPass(OR1KTargetMachine &TM);
 /// createOR1KFunnyNOPReplacer - This pass replaces normal NOPs with funny NOPs.
 FunctionPass* createOR1KFunnyNOPReplacer();
 
+/// createOR1KTargetTransformInfoPass - This pass creates an OR1K-specific
+/// Target Transformation Info pass.
+ImmutablePass *createOR1KTargetTransformInfoPass(const OR1KTargetMachine *TM);
+
 extern Target TheOR1KTarget;
 } // end namespace llvm;
 

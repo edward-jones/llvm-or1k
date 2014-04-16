@@ -19,6 +19,8 @@
 #include "OR1KISelLowering.h"
 #include "OR1KSelectionDAGInfo.h"
 #include "OR1KFrameLowering.h"
+#include "llvm/PassManager.h"
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/IR/DataLayout.h"
@@ -68,6 +70,11 @@ namespace llvm {
     }
 
     TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
+
+    void addAnalysisPasses(PassManagerBase &PM) override {
+      PM.add(createBasicTargetTransformInfoPass(this));
+      PM.add(createOR1KTargetTransformInfoPass(this));
+    }
   };
 } // End llvm namespace
 
