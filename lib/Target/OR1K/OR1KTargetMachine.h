@@ -18,23 +18,20 @@
 #include "OR1KInstrInfo.h"
 #include "OR1KISelLowering.h"
 #include "OR1KSelectionDAGInfo.h"
-//#include "OR1KIntrinsicInfo.h"
 #include "OR1KFrameLowering.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/IR/DataLayout.h"
 
 namespace llvm {
-  class formatted_raw_ostream;
-
   class OR1KTargetMachine : public LLVMTargetMachine {
-    OR1KSubtarget       Subtarget;
-    const DataLayout    DL; // Calculates type size & alignment
-    OR1KInstrInfo       InstrInfo;
-    OR1KTargetLowering  TLInfo;
+    OR1KSubtarget Subtarget;
+    const DataLayout DL;
+    OR1KInstrInfo InstrInfo;
+    OR1KTargetLowering TLInfo;
     OR1KSelectionDAGInfo TSInfo;
-    OR1KFrameLowering   FrameLowering;
-/*    OR1KIntrinsicInfo IntrinsicInfo;*/
+    OR1KFrameLowering FrameLowering;
+
   public:
     OR1KTargetMachine(const Target &T, StringRef TT,
                         StringRef CPU, StringRef FS,
@@ -42,32 +39,35 @@ namespace llvm {
                         Reloc::Model RM, CodeModel::Model CM,
                         CodeGenOpt::Level OL);
 
-    virtual const OR1KInstrInfo *getInstrInfo() const
-    { return &InstrInfo; }
+    const OR1KInstrInfo *getInstrInfo() const override {
+      return &InstrInfo;
+    }
 
-    virtual const TargetFrameLowering *getFrameLowering() const
-    { return &FrameLowering; }
+    const TargetFrameLowering *getFrameLowering() const override {
+      return &FrameLowering;
+    }
 
-    virtual const OR1KSubtarget *getSubtargetImpl() const
-    { return &Subtarget; }
+    const OR1KSubtarget *getSubtargetImpl() const override {
+      return &Subtarget;
+    }
 
-    virtual const DataLayout *getDataLayout() const
-    { return &DL; }
+    const DataLayout *getDataLayout() const override {
+      return &DL;
+    }
 
-    virtual const OR1KRegisterInfo *getRegisterInfo() const
-    { return &InstrInfo.getRegisterInfo(); }
+    const OR1KRegisterInfo *getRegisterInfo() const override {
+      return &InstrInfo.getRegisterInfo();
+    }
 
-    virtual const OR1KTargetLowering *getTargetLowering() const
-    { return &TLInfo; }
+    const OR1KTargetLowering *getTargetLowering() const override {
+     return &TLInfo;
+    }
 
-    virtual const OR1KSelectionDAGInfo* getSelectionDAGInfo() const
-    { return &TSInfo; }
+    const OR1KSelectionDAGInfo* getSelectionDAGInfo() const override{
+      return &TSInfo;
+    }
 
-/*    const TargetIntrinsicInfo *getIntrinsicInfo() const
-    { return &IntrinsicInfo; }
-*/
-    // Pass Pipeline Configuration
-    virtual TargetPassConfig *createPassConfig(PassManagerBase &PM);
+    TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
   };
 } // End llvm namespace
 
