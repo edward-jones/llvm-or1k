@@ -1,4 +1,4 @@
-; RUN: llc -march=or1k < %s | FileCheck %s
+; RUN: llc -march=or1k -disable-post-ra < %s | FileCheck %s
 
 define void @f0() nounwind {
 entry:
