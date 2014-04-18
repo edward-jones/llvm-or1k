@@ -48,11 +48,13 @@ void OR1KInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   else if (OR1K::SPRRegClass.contains(SrcReg))
     BuildMI(MBB, I, DL, get(OR1K::MFSPR), DestReg)
       .addReg(OR1K::R0)
-      .addImm(RI.getEncodingValue(SrcReg));
+      .addImm(RI.getEncodingValue(SrcReg))
+      .addReg(SrcReg, KillSrc ? RegState::ImplicitKill : RegState::Implicit);
   else if(OR1K::SPRRegClass.contains(DestReg))
     BuildMI(MBB, I, DL, get(OR1K::MTSPR), SrcReg)
       .addReg(OR1K::R0)
-      .addImm(RI.getEncodingValue(DestReg));
+      .addImm(RI.getEncodingValue(DestReg))
+      .addReg(DestReg, RegState::ImplicitDefine);
 }
 
 void OR1KInstrInfo::
