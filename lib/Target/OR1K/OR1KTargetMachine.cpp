@@ -14,10 +14,15 @@
 #include "OR1K.h"
 #include "OR1KTargetMachine.h"
 #include "llvm/PassManager.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/IR/IRPrintingPasses.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Transforms/Scalar.h"
+
 using namespace llvm;
 
 extern "C" void LLVMInitializeOR1KTarget() {
@@ -53,6 +58,8 @@ public:
     return getTM<OR1KTargetMachine>();
   }
 
+  void addIRPasses() override;
+
   bool addInstSelector() override;
   bool addPreEmitPass() override;
   bool addPreISel() override;
@@ -83,4 +90,29 @@ bool OR1KPassConfig::addPreEmitPass() {
 
 bool OR1KPassConfig::addPreISel() {
   return true;
+}
+
+/// Add common target configurable passes that perform LLVM IR to IR transforms
+/// following machine independent optimization.
+void OR1KPassConfig::addIRPasses() {
+  // Basic AliasAnalysis support.
+  // Add TypeBasedAliasAnalysis before BasicAliasAnalysis so that
+  // BasicAliasAnalysis wins if they disagree. This is intended to help
+  // support "obvious" type-punning idioms.
+  addPass(createTypeBasedAliasAnalysisPass());
+  addPass(createBasicAliasAnalysisPass());
+
+  // Run loop strength reduction before anything else.
+  if (getOptLevel() != CodeGenOpt::None) {
+    addPass(createOR1KLoopStrengthReduction());
+  }
+
+  addPass(createGCLoweringPass());
+
+  // Make sure that no unreachable blocks are instruction selected.
+  addPass(createUnreachableBlockEliminationPass());
+
+  // Prepare expensive constants for SelectionDAG.
+  if (getOptLevel() != CodeGenOpt::None)
+    addPass(createConstantHoistingPass());
 }
