@@ -34,6 +34,8 @@ class OR1KSubtarget : public OR1KGenSubtargetInfo {
   bool HasExt;
   bool HasSFII;
   bool HasFBit;
+  
+  InstrItineraryData InstrItins;
 public:
   /// This constructor initializes the data members to match that
   /// of the specified triple.
@@ -53,6 +55,12 @@ public:
   bool hasExt()    const { return HasExt; }
   bool hasSFII()   const { return HasSFII; }
   bool hasFBit()   const { return HasFBit; }
+  
+  const InstrItineraryData &getInstrItineraryData() const { return InstrItins; }
+  
+  bool enablePostRAScheduler(CodeGenOpt::Level OptLevel,
+                             AntiDepBreakMode& Mode,
+                             RegClassVector& CriticalPathRCs) const override;
 };
 } // End llvm namespace
 

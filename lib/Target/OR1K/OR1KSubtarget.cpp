@@ -11,11 +11,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "OR1KSubtarget.h"
 #include "OR1K.h"
+#include "OR1KRegisterInfo.h"
+#include "OR1KSubtarget.h"
+
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "OR1KGenSubtargetInfo.inc"
+
 using namespace llvm;
 
 void OR1KSubtarget::anchor() { }
@@ -37,4 +40,18 @@ OR1KSubtarget::OR1KSubtarget(const std::string &TT,
     CPUName = "generic";
 
   ParseSubtargetFeatures(CPUName, FS);
+
+  InstrItins = getInstrItineraryForCPU(CPUName);
+}
+
+bool
+OR1KSubtarget::enablePostRAScheduler(CodeGenOpt::Level OptLevel,
+                                     AntiDepBreakMode& Mode,
+                                     RegClassVector& CriticalPathRCs) const {
+  Mode = TargetSubtargetInfo::ANTIDEP_NONE;
+
+  CriticalPathRCs.clear();
+  CriticalPathRCs.push_back(&OR1K::GPRRegClass);
+    
+  return OptLevel >= CodeGenOpt::Default;
 }

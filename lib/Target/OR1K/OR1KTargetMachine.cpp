@@ -44,9 +44,10 @@ OR1KTargetMachine(const Target &T, StringRef TT,
   Subtarget(TT, CPU, FS),
   DL("E-m:e-p:32:32-i64:32-f64:32-v64:32-v128:32-a:0:32-n32"),
   InstrInfo(*this), TLInfo(*this), TSInfo(*this),
-  FrameLowering(Subtarget) {
+  FrameLowering(Subtarget), InstrItins(Subtarget.getInstrItineraryData()) {
   initAsmInfo();
 }
+
 namespace {
 /// OR1K Code Generator Pass Configuration Options.
 class OR1KPassConfig : public TargetPassConfig {

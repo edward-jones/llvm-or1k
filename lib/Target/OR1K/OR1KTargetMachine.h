@@ -33,6 +33,8 @@ namespace llvm {
     OR1KTargetLowering TLInfo;
     OR1KSelectionDAGInfo TSInfo;
     OR1KFrameLowering FrameLowering;
+    
+    const InstrItineraryData &InstrItins;
 
   public:
     OR1KTargetMachine(const Target &T, StringRef TT,
@@ -74,6 +76,10 @@ namespace llvm {
     void addAnalysisPasses(PassManagerBase &PM) override {
       PM.add(createBasicTargetTransformInfoPass(this));
       PM.add(createOR1KTargetTransformInfoPass(this));
+    }
+
+    const InstrItineraryData *getInstrItineraryData() const override {
+        return &InstrItins;
     }
   };
 } // End llvm namespace
