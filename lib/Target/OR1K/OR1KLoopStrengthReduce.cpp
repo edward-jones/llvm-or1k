@@ -1,3 +1,17 @@
+//===-- OR1KLoopStrengthReduce.cpp - Custom strength reduction for loops --===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+// This file implements a simple strength reduction transformation to expose
+// pointer increments within loops.
+//
+//===----------------------------------------------------------------------===//
+
 #define DEBUG_TYPE "or1k-loop-strength-reduce"
 #include "OR1K.h"
 #include "llvm/ADT/SmallBitVector.h"
