@@ -209,13 +209,13 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
   // Instruction Selection not handled by the auto-generated
   // tablegen selection should be handled here.
   switch(Opcode) {
-    default: break;
-    case ISD::FrameIndex: return SelectFrameIndex(Node);
-    case ISD::MULHU: return SelectMulHi(Node, false);
-    case ISD::MULHS: return SelectMulHi(Node, true);
-    case ISD::UMUL_LOHI: return SelectMulHiLo(Node, false);
-    case ISD::SMUL_LOHI: return SelectMulHiLo(Node, true);
-    case OR1KISD::GLOBAL_BASE_REG: return getGlobalBaseReg().getNode();
+  default: break;
+  case ISD::FrameIndex: return SelectFrameIndex(Node);
+  case ISD::MULHU: return SelectMulHi(Node, false);
+  case ISD::MULHS: return SelectMulHi(Node, true);
+  case ISD::UMUL_LOHI: return SelectMulHiLo(Node, false);
+  case ISD::SMUL_LOHI: return SelectMulHiLo(Node, true);
+  case OR1KISD::GLOBAL_BASE_REG: return getGlobalBaseReg().getNode();
   }
 
   // Select the default instruction

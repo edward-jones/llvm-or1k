@@ -185,9 +185,9 @@ unsigned OR1KInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
 }
 
 unsigned OR1KInstrInfo::getGlobalBaseReg(MachineFunction &MF) const {
-  OR1KMachineFunctionInfo *MFI = MF.getInfo<OR1KMachineFunctionInfo>();
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
 
-  unsigned GlobalBaseReg = MFI->getGlobalBaseReg();
+  unsigned GlobalBaseReg = FuncInfo->getGlobalBaseReg();
   if (GlobalBaseReg)
     return GlobalBaseReg;
 
@@ -196,11 +196,14 @@ unsigned OR1KInstrInfo::getGlobalBaseReg(MachineFunction &MF) const {
   MachineBasicBlock::iterator MBBI = FirstMBB.begin();
   MachineRegisterInfo &RegInfo = MF.getRegInfo();
 
-  GlobalBaseReg = RegInfo.createVirtualRegister(&OR1K::GPRRegClass);
+  if (RI.hasReservedGlobalBaseRegister(MF))
+    GlobalBaseReg = RI.getGlobalBaseRegister();
+  else
+    GlobalBaseReg = RegInfo.createVirtualRegister(&OR1K::GPRRegClass);
+
+  FuncInfo->setGlobalBaseReg(GlobalBaseReg);
 
   DebugLoc DL;
   BuildMI(FirstMBB, MBBI, DL, get(OR1K::GET_GLOBAL_BASE), GlobalBaseReg);
-  MFI->setGlobalBaseReg(GlobalBaseReg);
   return GlobalBaseReg;
-
 }

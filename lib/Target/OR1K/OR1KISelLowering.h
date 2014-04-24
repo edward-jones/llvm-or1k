@@ -25,8 +25,6 @@ namespace llvm {
     enum {
       FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
-      ADJDYNALLOC,
-
       /// Return with a flag operand. Operand 0 is the chain operand.
       RET_FLAG,
 
@@ -78,7 +76,6 @@ namespace llvm {
     SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerCTTZ(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerCTLZ(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerCTTZ_ZERO_UNDEF(SDValue Op, SelectionDAG &DAG) const;

@@ -19,36 +19,50 @@
 
 namespace llvm {
 
-/// OR1KMachineFunctionInfo - This class is derived from MachineFunction and
-/// contains private OR1K target-specific information for each MachineFunction.
 class OR1KMachineFunctionInfo : public MachineFunctionInfo {
-  /// SRetReturnReg - OR1K ABI require that sret lowering includes
-  /// returning the value of the returned struct in a register. This field
-  /// holds the virtual register into which the sret argument is passed.
-  unsigned SRetReturnReg;
-
- /// GlobalBaseReg - keeps track of the virtual register initialized for
-  /// use as the global base register. This is used for PIC in some PIC
-  /// relocation models.
-  unsigned GlobalBaseReg;
 
   /// VarArgsFrameIndex - FrameIndex for start of varargs area.
   int VarArgsFrameIndex;
 
 public:
   OR1KMachineFunctionInfo(MachineFunction &MF)
-    : SRetReturnReg(0),
-      GlobalBaseReg(0),
-      VarArgsFrameIndex(0) {}
+   : SRetReg(0), GlobalBaseReg(0),
+     ReturnAddressFI(0), FramePointerFI(0), BasePointerFI(0) {}
 
-  unsigned getSRetReturnReg() const { return SRetReturnReg; }
-  void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
+  bool hasSRetReturnReg() const { return SRetReg != 0; }
+  unsigned getSRetReturnReg() const { return SRetReg; }
+  void setSRetReturnReg(unsigned Reg) { SRetReg = Reg; }
 
   unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
   void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
 
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
   void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+
+  bool hasReturnAddressStackSlot() const { return ReturnAddressFI < 0; }
+  int getReturnAddressFI() const { return ReturnAddressFI; }
+  void setReturnAddressFI(int FI) { ReturnAddressFI = FI; }
+
+  bool hasFramePointerStackSlot() const { return FramePointerFI < 0; }
+  int getFramePointerFI() const { return FramePointerFI; }
+  void setFramePointerFI(int FI) { FramePointerFI = FI; }
+
+  bool hasBasePointerStackSlot() const { return BasePointerFI < 0; }
+  int getBasePointerFI() const { return BasePointerFI; }
+  void setBasePointerFI(int FI) { BasePointerFI = FI; }
+
+  bool isFrameIndexUsingPreviousSP(int FI) const {
+    return (hasReturnAddressStackSlot() && FI == ReturnAddressFI) ||
+           (hasFramePointerStackSlot() && FI == FramePointerFI) ||
+           (hasBasePointerStackSlot() && FI == BasePointerFI);
+  }
+
+private:
+  unsigned SRetReg;
+  unsigned GlobalBaseReg;
+  int ReturnAddressFI;
+  int FramePointerFI;
+  int BasePointerFI;
 };
 
 } // End llvm namespace

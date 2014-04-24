@@ -9,7 +9,7 @@ entry:
 ; CHECK: f0:
 ; check that the framepointer is used
 ; CHECK: l.sw    -4(r1), r2
-; CHECK: l.addi  r2, r1, 0
+; CHECK: l.ori  r2, r1, 0
 ; check that the stack realigns to an 8 byte boundary
 ; CHECK: l.addi  [[SCRATCHREG:r[0-9]+]], r1, -16
 ; CHECK: l.srli  [[SCRATCHREG]], [[SCRATCHREG]], 3
@@ -20,7 +20,7 @@ entry:
 ; CHECK: l.movhi [[REG:r[0-9]+]], 0
 ; CHECK: l.sw    0(r1), [[REG]]
 ; check that the stack pointer is restored from the frame pointer
-; CHECK: l.addi  r1, r2, 0
+; CHECK: l.ori  r1, r2, 0
 
 ; Test with a dynamically allocated stack object present
 define void @f1(i32 %n) nounwind {
@@ -35,11 +35,11 @@ entry:
 ; CHECK: f1:
 ; check that the framepointer is used
 ; CHECK: l.sw    -4(r1), r2
+; CHECK: l.ori  r2, r1, 0
 ; and that the base reg is saved to the stack
 ; CHECK: l.sw    -8(r1), [[BASEREG:r[0-9]+]]
-; CHECK: l.addi  r2, r1, 0
 ; check that the stack realigns to an 8 byte boundary
-; CHECK: l.addi  [[SCRATCHREG:r[0-9]+]], r1, -16
+; CHECK: l.addi  [[SCRATCHREG:r[0-9]+]], r1, -24
 ; CHECK: l.srli  [[SCRATCHREG]], [[SCRATCHREG]], 3
 ; CHECK: l.slli  r1, [[SCRATCHREG]], 3
 ; check that the realigned stack pointer is copied
@@ -51,4 +51,4 @@ entry:
 ; CHECK: l.movhi [[REG:r[0-9]+]], 0
 ; CHECK: l.sw    0([[BASEREG]]), [[REG]]
 ; check that the stack pointer is restored from the frame pointer
-; CHECK: l.addi  r1, r2, 0
+; CHECK: l.ori  r1, r2, 0

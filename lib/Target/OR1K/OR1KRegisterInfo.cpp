@@ -11,8 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "OR1K.h"
 #include "OR1KRegisterInfo.h"
+#include "OR1K.h"
+#include "OR1KFrameLowering.h"
+#include "OR1KMachineFunctionInfo.h"
 #include "OR1KSubtarget.h"
 #include "llvm/IR/Function.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -20,7 +22,6 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/IR/Type.h"
 #include "llvm/ADT/BitVector.h"
@@ -36,29 +37,66 @@ OR1KRegisterInfo::OR1KRegisterInfo(const TargetInstrInfo &tii)
 
 const uint16_t*
 OR1KRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  const TargetFrameLowering *TFI = MF->getTarget().getFrameLowering();
+  return CSR_SaveList;
+}
 
-  return TFI->hasFP(*MF) ? CSR_FP_SaveList : CSR_SaveList;
+bool OR1KRegisterInfo::
+hasReservedGlobalBaseRegister(const MachineFunction &MF) const {
+  if (MF.getTarget().getRelocationModel() != Reloc::PIC_)
+    return false;
+
+  switch (MF.getTarget().getCodeModel()) {
+  default: return true;
+  case CodeModel::Medium:
+  case CodeModel::Large:
+    return false;
+  }
+}
+
+unsigned OR1KRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
+  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+
+  return TFI->hasFP(MF) ? OR1K::R2 : OR1K::R1;
+}
+
+unsigned OR1KRegisterInfo::getGlobalBaseRegister() const {
+  return OR1K::R16;
+}
+
+unsigned OR1KRegisterInfo::getBaseRegister() const {
+  return OR1K::R14;
 }
 
 BitVector OR1KRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
+  const TargetMachine &TM = MF.getTarget();
+  auto TFI = static_cast<const OR1KFrameLowering*>(TM.getFrameLowering());
+
   BitVector Reserved(getNumRegs());
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
 
   Reserved.set(OR1K::R0);
   Reserved.set(OR1K::R1);
-  if (TFI->hasFP(MF))
-    Reserved.set(OR1K::R2);
   Reserved.set(OR1K::R9);
   Reserved.set(OR1K::R10);
-  Reserved.set(OR1K::R16); // Global pointer
-  if (hasBasePointer(MF))
+
+  if (TFI->hasFP(MF))
+    Reserved.set(getFrameRegister(MF));
+
+  if (TFI->hasBP(MF))
     Reserved.set(getBaseRegister());
+
+  if (hasReservedGlobalBaseRegister(MF))
+    Reserved.set(getGlobalBaseRegister());
+
   return Reserved;
 }
 
-bool
-OR1KRegisterInfo::requiresRegisterScavenging(const MachineFunction &MF) const {
+bool OR1KRegisterInfo::
+requiresRegisterScavenging(const MachineFunction &MF) const {
+  return true;
+}
+
+bool OR1KRegisterInfo::
+requiresFrameIndexScavenging(const MachineFunction &MF) const {
   return true;
 }
 
@@ -69,68 +107,63 @@ OR1KRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   assert(SPAdj == 0 && "Unexpected");
 
   MachineInstr &MI = *II;
-  MachineFunction &MF = *MI.getParent()->getParent();
+  MachineBasicBlock &MBB = *MI.getParent();
+  MachineFunction &MF = *MBB.getParent();
+  MachineFrameInfo *MFI = MF.getFrameInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
-  bool HasFP = TFI->hasFP(MF);
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
   DebugLoc dl = MI.getDebugLoc();
 
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
 
-  int Offset = MF.getFrameInfo()->getObjectOffset(FrameIndex) +
-               MI.getOperand(FIOperandNum+1).getImm();
+  int Offset = MFI->getObjectOffset(FrameIndex) +
+               MI.getOperand(FIOperandNum + 1).getImm();
 
-  // Addressable stack objects are addressed using neg. offsets from fp
-  // or pos. offsets from sp/basepointer
-  if (!HasFP || (needsStackRealignment(MF) && FrameIndex >= 0))
-    Offset += MF.getFrameInfo()->getStackSize();
+  bool UsePreviousSP = FuncInfo->isFrameIndexUsingPreviousSP(FrameIndex);
+  bool HasRealignedStack = needsStackRealignment(MF);
+  bool IsLocalObject = FrameIndex >= 0;
 
-  unsigned FrameReg = getFrameRegister(MF);
-  if (FrameIndex >= 0) {
-    if (hasBasePointer(MF))
-      FrameReg = getBaseRegister();
-    else if (needsStackRealignment(MF))
-      FrameReg = OR1K::R1;
-  }
+  bool UsesBP = MFI->hasVarSizedObjects() &&
+                IsLocalObject &&
+                HasRealignedStack;
 
-  // Replace frame index with a frame pointer reference.
-  // If the offset is small enough to fit in the immediate field, directly
-  // encode it.
-  // Otherwise scavenge a register and encode it in to a MOVHI - ORI sequence
+  bool NeedsPositiveOffset = !TFI->hasFP(MF) ||
+                             (IsLocalObject && HasRealignedStack);
+
+  if (NeedsPositiveOffset && !UsePreviousSP)
+    Offset += MFI->getStackSize();
+
+  unsigned FrameReg = 0;
+  if (UsesBP)
+    FrameReg = getBaseRegister();
+  else if (UsePreviousSP || NeedsPositiveOffset)
+    FrameReg = OR1K::R1;
+  else
+    FrameReg = getFrameRegister(MF);
+
   if (!isInt<16>(Offset)) {
-    assert(RS && "Register scavenging must be on");
-    unsigned Reg = RS->FindUnusedReg(&OR1K::GPRRegClass);
-    if (!Reg)
-       Reg = RS->scavengeRegister(&OR1K::GPRRegClass, II, SPAdj);
-    assert(Reg && "Register scavenger failed");
+    unsigned VReg = MRI.createVirtualRegister(&OR1K::GPRRegClass);
 
-    // Reg = hi(offset) | lo(offset)
-    BuildMI(*MI.getParent(), II, dl, TII.get(OR1K::MOVHI), Reg)
-      .addImm((uint32_t)Offset >> 16);
-    BuildMI(*MI.getParent(), II, dl, TII.get(OR1K::ORI), Reg)
-      .addReg(Reg).addImm(Offset & 0xffffU);
-    // Reg = Reg + Sp
-    MI.setDesc(TII.get(OR1K::ADD));
-    MI.getOperand(FIOperandNum).ChangeToRegister(Reg, false, false, true);
-    MI.getOperand(FIOperandNum+1).ChangeToRegister(FrameReg, false);
+    // l.movhi rT, hi(offset)
+    // l.ori rT, rT, lo(offset)
+    // l.add rT, rT, rF
+    BuildMI(MBB, II, dl, TII.get(OR1K::MOVHI), VReg)
+     .addImm((Offset >> 16) & 0xFFFFU);
+    BuildMI(MBB, II, dl, TII.get(OR1K::ORI), VReg)
+     .addReg(VReg).addImm(Offset & 0xFFFFU);
+    BuildMI(MBB, II, dl, TII.get(OR1K::ADD), VReg)
+     .addReg(VReg).addReg(FrameReg);
+
+    // Use value in rT as effective address.
+    MI.getOperand(FIOperandNum).ChangeToRegister(VReg, false, false, true);
+    MI.getOperand(FIOperandNum + 1).ChangeToImmediate(0);
 
     return;
   }
 
   MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
-  MI.getOperand(FIOperandNum+1).ChangeToImmediate(Offset);
-}
-
-void OR1KRegisterInfo::
-processFunctionBeforeFrameFinalized(MachineFunction &MF) const {}
-
-bool OR1KRegisterInfo::hasBasePointer(const MachineFunction &MF) const {
-   const MachineFrameInfo *MFI = MF.getFrameInfo();
-   // When we need stack realignment and there are dynamic allocas, we can't
-   // reference off of the stack pointer, so we reserve a base pointer.
-   if (needsStackRealignment(MF) && MFI->hasVarSizedObjects())
-     return true;
-
-   return false;
+  MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
 }
 
 bool OR1KRegisterInfo::needsStackRealignment(const MachineFunction &MF) const {
@@ -142,26 +175,18 @@ bool OR1KRegisterInfo::needsStackRealignment(const MachineFunction &MF) const {
                                      Attribute::StackAlignment));
 }
 
-unsigned OR1KRegisterInfo::getRARegister() const {
-  return OR1K::R9;
-}
-
-unsigned OR1KRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
-
-  return TFI->hasFP(MF) ? OR1K::R2 : OR1K::R1;
-}
-
-unsigned OR1KRegisterInfo::getBaseRegister() const {
-  return OR1K::R14;
-}
-
-unsigned OR1KRegisterInfo::getEHExceptionRegister() const {
-  llvm_unreachable("What is the exception register");
-  return 0;
-}
-
-unsigned OR1KRegisterInfo::getEHHandlerRegister() const {
-  llvm_unreachable("What is the exception handler register");
-  return 0;
+bool OR1KRegisterInfo::hasReservedSpillSlot(const MachineFunction &MF,
+                                            unsigned Reg,
+                                            int &FrameIndex) const {
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
+  switch (Reg) {
+  default: break;
+  case OR1K::R9:
+    FrameIndex = FuncInfo->getReturnAddressFI();
+    return FuncInfo->hasReturnAddressStackSlot();
+  case OR1K::R2:
+    FrameIndex = FuncInfo->getFramePointerFI();
+    return FuncInfo->hasFramePointerStackSlot();
+  }
+  return false;
 }

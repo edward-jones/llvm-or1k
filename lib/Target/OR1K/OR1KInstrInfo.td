@@ -32,8 +32,6 @@ def SDT_OR1KSelectCC     : SDTypeProfile<1, 2, [SDTCisSameAs<0, 1>,
 def SDT_OR1KBrCC         : SDTypeProfile<0, 2, [SDTCisVT<0, OtherVT>]>;
 def SDT_OR1KWrapper      : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>,
                                                 SDTCisPtrTy<0>]>;
-def SDT_OR1KAdjDynAlloc  : SDTypeProfile<1, 1, [SDTCisVT<0, i32>,
-                                                SDTCisVT<1, i32>]>;
 
 def call            : SDNode<"OR1KISD::CALL", SDT_OR1KCall,
                              [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
@@ -53,7 +51,6 @@ def OR1Kselectcc    : SDNode<"OR1KISD::SELECT_CC", SDT_OR1KSelectCC,
 def OR1KWrapper     : SDNode<"OR1KISD::Wrapper", SDT_OR1KWrapper>;
 def OR1KHi          : SDNode<"OR1KISD::HI", SDTIntUnaryOp>;
 def OR1KLo          : SDNode<"OR1KISD::LO", SDTIntUnaryOp>;
-def OR1Kadjdynalloc : SDNode<"OR1KISD::ADJDYNALLOC", SDT_OR1KAdjDynAlloc>;
 def OR1Kff1         : SDNode<"OR1KISD::FF1", SDTIntUnaryOp>;
 def OR1Kfl1         : SDNode<"OR1KISD::FL1", SDTIntUnaryOp>;
 
@@ -610,12 +607,6 @@ def ADJCALLSTACKUP   : Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
                               [(callseq_end timm:$amt1, timm:$amt2)]>;
 }
 
-let Defs = [R1], Uses = [R1] in {
-  def ADJDYNALLOC : Pseudo<(outs GPR:$dst), (ins GPR:$src),
-                    "#ADJDYNALLOC $dst $src",
-                    [(set GPR:$dst, (OR1Kadjdynalloc GPR:$src))]>;
-}
-
 let Uses = [SR_F], usesCustomInserter = 1, Predicates = [NoCmov] in {
   def Select : Pseudo<(outs GPR:$dst), (ins GPR:$src, GPR:$src2),
                        "# Select PSEUDO $dst $src $src2",
@@ -629,7 +620,7 @@ let Uses = [SR_F], usesCustomInserter = 1, Predicates = [NoCmov] in {
 }
 
 
-let neverHasSideEffects = 1 in
+let neverHasSideEffects = 1, Defs = [R9], Uses = [R9] in
   def GET_GLOBAL_BASE : Pseudo<(outs GPR:$gp), (ins),
                                "#GET_GLOBAL_BASE $gp", []>;
 
