@@ -16,6 +16,7 @@
 #include "OR1KISelLowering.h"
 #include "OR1K.h"
 #include "OR1KMachineFunctionInfo.h"
+#include "OR1KRegisterInfo.h"
 #include "OR1KTargetMachine.h"
 #include "OR1KSubtarget.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -79,7 +80,7 @@ OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm) :
 
   setOperationAction(ISD::VASTART,            MVT::Other, Custom);
   setOperationAction(ISD::VAARG,              MVT::Other, Expand);
-  setOperationAction(ISD::VACOPY,             MVT::Other, Expand);
+  setOperationAction(ISD::VACOPY,             MVT::Other, Custom);
   setOperationAction(ISD::VAEND,              MVT::Other, Expand);
 
   if (!Subtarget.hasDiv()) {
@@ -158,6 +159,7 @@ SDValue OR1KTargetLowering::LowerOperation(SDValue Op,
   case ISD::JumpTable:          return LowerJumpTable(Op, DAG);
   case ISD::SELECT_CC:          return LowerSELECT_CC(Op, DAG);
   case ISD::VASTART:            return LowerVASTART(Op, DAG);
+  case ISD::VACOPY:             return LowerVACOPY(Op, DAG);
   case ISD::CTTZ:               return LowerCTTZ(Op, DAG);
   case ISD::CTTZ_ZERO_UNDEF:    return LowerCTTZ_ZERO_UNDEF(Op, DAG);
   case ISD::CTLZ:               // fall through
@@ -298,227 +300,249 @@ void OR1KTargetLowering::LowerAsmOperandForConstraint(SDValue Op,
 //                      Calling Convention Implementation
 //===----------------------------------------------------------------------===//
 
+namespace {
+
+class OR1KCCState : public CCState {
+public:
+  OR1KCCState(CallingConv::ID CC, bool IsVarArg, MachineFunction &MF,
+              const TargetMachine &TM, SmallVectorImpl<CCValAssign> &Locs,
+              LLVMContext &C)
+   : CCState(CC, IsVarArg, MF, TM, Locs, C), IsEndOfFixedArgs(false) {}
+
+  void AnalyzeCallOperands(const SmallVectorImpl<ISD::OutputArg> &Outs,
+                           CCAssignFn Fn);
+
+  bool isEndOfFixedArgs() const { return IsEndOfFixedArgs; }
+
+private:
+  bool IsEndOfFixedArgs;
+};
+
+}
+
+void OR1KCCState::
+AnalyzeCallOperands(const SmallVectorImpl<ISD::OutputArg> &Outs,
+                    CCAssignFn Fn) {
+  unsigned NumOps = Outs.size();
+  for (unsigned i = 0; i != NumOps; ++i) {
+    MVT ArgVT = Outs[i].VT;
+    ISD::ArgFlagsTy ArgFlags = Outs[i].Flags;
+    IsEndOfFixedArgs = isVarArg() && !Outs[i].IsFixed;
+    if (Fn(i, ArgVT, ArgVT, CCValAssign::Full, ArgFlags, *this)) {
+#ifndef NDEBUG
+      dbgs() << "Call operand #" << i << " has unhandled type "
+             << EVT(ArgVT).getEVTString() << '\n';
+#endif
+      llvm_unreachable(0);
+    }
+  }
+}
+
+static bool CC_OR1K32_PairedArgs(unsigned ValNo, MVT ValVT, MVT LocVT,
+                                 CCValAssign::LocInfo LocInfo,
+                                 ISD::ArgFlagsTy ArgFlags, CCState &State) {
+  assert(ArgFlags.isSplit() && "Unexpected non Split argument!");
+
+  static const MCPhysReg Regs[] = {
+    OR1K::R3, OR1K::R4, OR1K::R5,
+    OR1K::R6, OR1K::R7, OR1K::R8
+  };
+  const unsigned NumRegs = array_lengthof(Regs);
+
+  unsigned FirstUnalloc = State.getFirstUnallocated(Regs, NumRegs);
+
+  // Check if there are at least two registers available.
+  if (NumRegs - FirstUnalloc >= 2) {
+    unsigned Reg = State.AllocateReg(Regs[FirstUnalloc]);
+    assert(Reg && "Register already allocated?!");
+    State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
+    return true;
+  }
+
+  // Not enough registers allocate the value on the stack shadowing all
+  // registers.
+  unsigned Offset = State.AllocateStack(4, 4, Regs, NumRegs);
+  State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
+
+  return true;
+}
+
 #include "OR1KGenCallingConv.inc"
 
-static unsigned NumFixedArgs;
-static bool CC_OR1K32_VarArg(unsigned ValNo, MVT ValVT,
-                             MVT LocVT, CCValAssign::LocInfo LocInfo,
-                             ISD::ArgFlagsTy ArgFlags, CCState &State) {
-  // Handle fixed arguments with default CC
-  if (ValNo < NumFixedArgs)
-    return CC_OR1K32(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State);
-
-  // Promote i8/i16 args to i32
-  if (LocVT == MVT::i8 ||
-      LocVT == MVT::i16) {
-    LocVT = MVT::i32;
-    if (ArgFlags.isSExt())
-        LocInfo = CCValAssign::SExt;
-    else if (ArgFlags.isZExt())
-        LocInfo = CCValAssign::ZExt;
-    else
-        LocInfo = CCValAssign::AExt;
-  }
-
-  // VarArgs get passed on stack
-  unsigned Offset = State.AllocateStack(4, 4);
-  State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
-  return false;
-}
-
-SDValue OR1KTargetLowering::
-LowerFormalArguments(SDValue Chain,
-                     CallingConv::ID CallConv,
-                     bool isVarArg,
-                     const SmallVectorImpl<ISD::InputArg> &Ins,
-                     SDLoc dl, SelectionDAG &DAG,
-                     SmallVectorImpl<SDValue> &InVals) const {
-  switch (CallConv) {
-  default:
-    llvm_unreachable("Unsupported calling convention");
-  case CallingConv::C:
-  case CallingConv::Fast:
-    return LowerCCCArguments(Chain, CallConv, isVarArg, Ins, dl, DAG, InVals);
-  }
-}
-
-SDValue
-OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
-                              SmallVectorImpl<SDValue> &InVals) const {
-  SelectionDAG &DAG                     = CLI.DAG;
-  SDLoc &dl                             = CLI.DL;
-  SmallVector<ISD::OutputArg, 32> &Outs = CLI.Outs;
-  SmallVector<SDValue, 32> &OutVals     = CLI.OutVals;
-  SmallVector<ISD::InputArg, 32> &Ins   = CLI.Ins;
-  SDValue Chain                         = CLI.Chain;
-  SDValue Callee                        = CLI.Callee;
-  bool &isTailCall                      = CLI.IsTailCall;
-  CallingConv::ID CallConv              = CLI.CallConv;
-  bool isVarArg                         = CLI.IsVarArg;
-
-  // OR1K target does not yet support tail call optimization.
-  isTailCall = false;
-
-  switch (CallConv) {
-  default:
-    llvm_unreachable("Unsupported calling convention");
-  case CallingConv::Fast:
-  case CallingConv::C:
-    return LowerCCCCallTo(Chain, Callee, CallConv, isVarArg, isTailCall,
-                          Outs, OutVals, Ins, dl, DAG, InVals);
-  }
-}
-
-/// LowerCCCArguments - transform physical registers into virtual registers and
-/// generate load operations for arguments places on the stack.
-SDValue
-OR1KTargetLowering::LowerCCCArguments(SDValue Chain,
-                                      CallingConv::ID CallConv,
-                                      bool isVarArg,
-                                      const SmallVectorImpl<ISD::InputArg>
-                                      &Ins,
-                                      SDLoc dl,
-                                      SelectionDAG &DAG,
-                                      SmallVectorImpl<SDValue> &InVals) const {
+static SDValue HandleVarArgs_NewABI(SDValue Chain, OR1KCCState &CCInfo,
+                                   SDLoc dl, SelectionDAG &DAG) {
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo *MFI = MF.getFrameInfo();
-  MachineRegisterInfo &RegInfo = MF.getRegInfo();
-  OR1KMachineFunctionInfo *OR1KMFI = MF.getInfo<OR1KMachineFunctionInfo>();
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
 
-  // Assign locations to all of the incoming arguments.
-  SmallVector<CCValAssign, 16> ArgLocs;
-  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
-                 getTargetMachine(), ArgLocs, *DAG.getContext());
-  CCInfo.AnalyzeFormalArguments(Ins, CC_OR1K32);
+  FuncInfo->setVariadic(true);
 
-  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
-    CCValAssign &VA = ArgLocs[i];
-    if (VA.isRegLoc()) {
-      // Arguments passed in registers
-      EVT RegVT = VA.getLocVT();
-      switch (RegVT.getSimpleVT().SimpleTy) {
-      default:
-        {
-#ifndef NDEBUG
-          errs() << "LowerFormalArguments Unhandled argument type: "
-               << RegVT.getSimpleVT().SimpleTy << "\n";
-#endif
-          llvm_unreachable(0);
-        }
-      case MVT::i32:
-      case MVT::f32:
-        unsigned VReg = RegInfo.createVirtualRegister(&OR1K::GPRRegClass);
-        RegInfo.addLiveIn(VA.getLocReg(), VReg);
-        SDValue ArgValue = DAG.getCopyFromReg(Chain, dl, VReg, RegVT);
+  OR1KMachineFunctionInfo::VarArgsInfo &VAInfo = FuncInfo->getVarArgsInfo();
 
-        // If this is an 8/16-bit value, it is really passed promoted to 32
-        // bits. Insert an assert[sz]ext to capture this, then truncate to the
-        // right size.
-        if (VA.getLocInfo() == CCValAssign::SExt)
-          ArgValue = DAG.getNode(ISD::AssertSext, dl, RegVT, ArgValue,
-                                 DAG.getValueType(VA.getValVT()));
-        else if (VA.getLocInfo() == CCValAssign::ZExt)
-          ArgValue = DAG.getNode(ISD::AssertZext, dl, RegVT, ArgValue,
-                                 DAG.getValueType(VA.getValVT()));
+  int StackOffset = CCInfo.getNextStackOffset();
+  VAInfo.StackAreaFI = MFI->CreateFixedObject(1, StackOffset, true);
 
-        if (VA.getLocInfo() != CCValAssign::Full)
-          ArgValue = DAG.getNode(ISD::TRUNCATE, dl, VA.getValVT(), ArgValue);
+  static const MCPhysReg Regs[] = {
+    OR1K::R3, OR1K::R4, OR1K::R5,
+    OR1K::R6, OR1K::R7, OR1K::R8
+  };
+  const unsigned NumRegs = array_lengthof(Regs);
 
-        InVals.push_back(ArgValue);
-      }
-    } else {
-      // Sanity check
-      assert(VA.isMemLoc());
-      // Load the argument to a virtual register
-      unsigned ObjSize = VA.getLocVT().getSizeInBits()/8;
-      // Check that the argument fits in stack slot
-      if (ObjSize > 4) {
-        errs() << "LowerFormalArguments Unhandled argument type: "
-             << EVT(VA.getLocVT()).getEVTString()
-             << "\n";
-      }
-      // Create the frame index object for this incoming parameter...
-      int FI = MFI->CreateFixedObject(ObjSize, VA.getLocMemOffset(), true);
+  unsigned FirstUnalloc = CCInfo.getFirstUnallocated(Regs, NumRegs);
 
-      // Create the SelectionDAG nodes corresponding to a load
-      //from this parameter
-      SDValue FIN = DAG.getFrameIndex(FI, MVT::i32);
-      InVals.push_back(DAG.getLoad(VA.getLocVT(), dl, Chain, FIN,
-                                   MachinePointerInfo::getFixedStack(FI),
-                                   false, false, false, 0));
-    }
+  // To minimaze the wasted stack space the reg save area is allocated
+  // if non fixed arguments can be effectively passed by registers.
+
+  if (FirstUnalloc == NumRegs) {
+    VAInfo.RegSaveAreaFI = 0;
+    VAInfo.AllocatedGPR = 24;
+    return Chain;
   }
 
-  // The OR1K ABI for returning structs by value requires that we copy
-  // the sret argument into r11 for the return. Save the argument into
-  // a virtual register so that we can access it from the return points.
-  if (MF.getFunction()->hasStructRetAttr()) {
-    unsigned Reg = OR1KMFI->getSRetReturnReg();
-    if (!Reg) {
-      Reg = MF.getRegInfo().createVirtualRegister(getRegClassFor(MVT::i32));
-      OR1KMFI->setSRetReturnReg(Reg);
-    }
-    SDValue Copy = DAG.getCopyToReg(DAG.getEntryNode(), dl, Reg, InVals[0]);
-    Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, Copy, Chain);
-  }
+  unsigned RegSize = OR1K::GPRRegClass.getSize();
+  unsigned RegSaveAreaSize = RegSize * (NumRegs - FirstUnalloc);
 
-  if (isVarArg) {
-    // Record the frame index of the first variable argument
-    // which is a value necessary to VASTART.
-    int FI = MFI->CreateFixedObject(4, CCInfo.getNextStackOffset(), true);
-    OR1KMFI->setVarArgsFrameIndex(FI);
+  FuncInfo->setRegSaveAreaSize(RegSaveAreaSize);
+  VAInfo.AllocatedGPR = RegSize * FirstUnalloc;
+
+  int FI = MFI->CreateFixedObject(RegSaveAreaSize, -RegSaveAreaSize, true);
+  SDValue Base = DAG.getFrameIndex(FI, MVT::i32);
+  VAInfo.RegSaveAreaFI = FI;
+
+  int Offset = 0;
+  for (; FirstUnalloc != NumRegs; ++FirstUnalloc, Offset += RegSize) {
+    unsigned Reg = Regs[FirstUnalloc];
+    unsigned VReg = MF.addLiveIn(Reg, &OR1K::GPRRegClass);
+
+    SDValue Val = DAG.getCopyFromReg(Chain, dl, VReg, MVT::i32);
+    SDValue Ptr = DAG.getNode(ISD::ADD, dl, MVT::i32, Base,
+                              DAG.getConstant(Offset, MVT::i32));
+    Chain = DAG.getStore(Chain, dl, Val, Ptr, MachinePointerInfo(),
+                         false, false, 0);
   }
 
   return Chain;
 }
 
-SDValue
-OR1KTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
-                                bool isVarArg,
-                                const SmallVectorImpl<ISD::OutputArg> &Outs,
-                                const SmallVectorImpl<SDValue> &OutVals,
-                                SDLoc dl, SelectionDAG &DAG) const {
+SDValue OR1KTargetLowering::
+LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
+                     bool IsVarArg, const SmallVectorImpl<ISD::InputArg> &Ins,
+                     SDLoc dl, SelectionDAG &DAG,
+                     SmallVectorImpl<SDValue> &InVals) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  MachineFrameInfo *MFI = MF.getFrameInfo();
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
 
-  // CCValAssign - represent the assignment of the return value to a location
-  SmallVector<CCValAssign, 16> RVLocs;
+  // Assign locations to all of the incoming arguments.
+  SmallVector<CCValAssign, 16> ArgLocs;
+  OR1KCCState CCInfo(CallConv, IsVarArg, MF, getTargetMachine(),
+                     ArgLocs, *DAG.getContext());
+  CCInfo.AnalyzeFormalArguments(Ins, CC_OR1K32);
 
-  // CCState - Info about the registers and stack slot.
-  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
-                 getTargetMachine(), RVLocs, *DAG.getContext());
+  SDValue ArgsChain = DAG.getUNDEF(MVT::Other);
 
-  // Analize return values.
+  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
+    CCValAssign &VA = ArgLocs[i];
+    EVT ValVT = VA.getValVT();
+    ISD::ArgFlagsTy Flags = Ins[i].Flags;
+
+    SDValue ArgValue;
+
+    if (VA.isRegLoc()) {
+      EVT RegVT = VA.getLocVT();
+      unsigned Reg = VA.getLocReg();
+
+      assert((RegVT == MVT::i32 || RegVT == MVT::f32) &&
+             "Unexpected register type!");
+
+      unsigned VReg = MF.addLiveIn(Reg, &OR1K::GPRRegClass);
+      ArgValue = DAG.getCopyFromReg(ArgsChain, dl, VReg, RegVT);
+
+      if (Flags.isSRet())
+        FuncInfo->setSRetReturnReg(VReg);
+
+      switch (VA.getLocInfo()) {
+      default:
+        llvm_unreachable("Unsupported LocInfo!");
+      case CCValAssign::Full:
+        break;
+      case CCValAssign::SExt:
+        ArgValue = DAG.getNode(ISD::AssertSext, dl, RegVT, ArgValue,
+                               DAG.getValueType(ValVT));
+        ArgValue = DAG.getNode(ISD::TRUNCATE, dl, ValVT, ArgValue);
+        break;
+      case CCValAssign::ZExt:
+        ArgValue = DAG.getNode(ISD::AssertZext, dl, RegVT, ArgValue,
+                               DAG.getValueType(ValVT));
+        ArgValue = DAG.getNode(ISD::TRUNCATE, dl, ValVT, ArgValue);
+        break;
+      }
+    } else {
+      assert(VA.isMemLoc());
+
+      unsigned ObjSize = VA.getLocVT().getSizeInBits() / 8;
+      unsigned ObjOffset = VA.getLocMemOffset();
+
+      int FI = MFI->CreateFixedObject(ObjSize, ObjOffset, true);
+
+      ArgValue = DAG.getLoad(VA.getLocVT(), dl, ArgsChain,
+                             DAG.getFrameIndex(FI, MVT::i32),
+                             MachinePointerInfo::getFixedStack(FI),
+                             false, false, false, 0);
+    }
+
+    InVals.push_back(ArgValue);
+  }
+
+  if (IsVarArg && Subtarget.isNewABI())
+    Chain = HandleVarArgs_NewABI(Chain, CCInfo, dl, DAG);
+
+  if (IsVarArg && Subtarget.isDefaultABI()) {
+    // The DefaultABI defines the passage of variadic parameter on the stack.
+    FuncInfo->setVariadic(true);
+
+    OR1KMachineFunctionInfo::VarArgsInfo &VAInfo = FuncInfo->getVarArgsInfo();
+    int VarArgsOffset = CCInfo.getNextStackOffset();
+    VAInfo.VarArgsAreaFI = MFI->CreateFixedObject(1, VarArgsOffset, true);
+  }
+
+  // Relink arguments chain to the real chain.
+  DAG.ReplaceAllUsesOfValueWith(ArgsChain, Chain);
+
+  return Chain;
+}
+
+SDValue OR1KTargetLowering::
+LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
+            const SmallVectorImpl<ISD::OutputArg> &Outs,
+            const SmallVectorImpl<SDValue> &OutVals,
+            SDLoc dl, SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
+
+  SmallVector<CCValAssign, 4> RVLocs;
+  OR1KCCState CCInfo(CallConv, IsVarArg, DAG.getMachineFunction(),
+                     getTargetMachine(), RVLocs, *DAG.getContext());
   CCInfo.AnalyzeReturn(Outs, RetCC_OR1K32);
 
   SDValue Flag;
   SmallVector<SDValue, 4> RetOps(1, Chain);
-
-  // Copy the result values into the output registers.
   for (unsigned i = 0; i != RVLocs.size(); ++i) {
     CCValAssign &VA = RVLocs[i];
     assert(VA.isRegLoc() && "Can only return in registers!");
 
     Chain = DAG.getCopyToReg(Chain, dl, VA.getLocReg(),
                              OutVals[i], Flag);
-
-    // Guarantee that all emitted copies are stuck together,
-    // avoiding something bad.
     Flag = Chain.getValue(1);
 
     RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
-  // The OR1K ABI for returning structs by value requires that we copy
-  // the sret argument into r11 for the return. We saved the argument into
-  // a virtual register in the entry block, so now we copy the value out
-  // and into r11.
-  if (DAG.getMachineFunction().getFunction()->hasStructRetAttr()) {
-    MachineFunction &MF = DAG.getMachineFunction();
-    OR1KMachineFunctionInfo *OR1KMFI = MF.getInfo<OR1KMachineFunctionInfo>();
-    unsigned Reg = OR1KMFI->getSRetReturnReg();
-    assert(Reg &&
-           "SRetReturnReg should have been set in LowerFormalArguments().");
-    SDValue Val = DAG.getCopyFromReg(Chain, dl, Reg, getPointerTy());
-
+  // Function that returns a struct by value must set in r11 the pointer
+  // to the storage reserved by the callee for the value itself.
+  if (FuncInfo->hasSRetReturnReg()) {
+    unsigned VReg = FuncInfo->getSRetReturnReg();
+    SDValue Val = DAG.getCopyFromReg(Chain, dl, VReg, getPointerTy());
     Chain = DAG.getCopyToReg(Chain, dl, OR1K::R11, Val, Flag);
     Flag = Chain.getValue(1);
 
@@ -530,141 +554,108 @@ OR1KTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   if (Flag.getNode())
     RetOps.push_back(Flag);
 
-  // Return Void
   return DAG.getNode(OR1KISD::RET_FLAG, dl, MVT::Other,
                      RetOps.data(), RetOps.size());
 }
 
-/// LowerCCCCallTo - functions arguments are copied from virtual regs to
-/// (physical regs)/(stack frame), CALLSEQ_START and CALLSEQ_END are emitted.
-SDValue
-OR1KTargetLowering::LowerCCCCallTo(SDValue Chain, SDValue Callee,
-                                   CallingConv::ID CallConv, bool isVarArg,
-                                   bool isTailCall,
-                                   const SmallVectorImpl<ISD::OutputArg>
-                                   &Outs,
-                                   const SmallVectorImpl<SDValue> &OutVals,
-                                   const SmallVectorImpl<ISD::InputArg> &Ins,
-                                   SDLoc dl, SelectionDAG &DAG,
-                                   SmallVectorImpl<SDValue> &InVals) const {
-  // Analyze operands of the call, assigning locations to each operand.
+SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
+                                      SmallVectorImpl<SDValue> &InVals) const {
+  SelectionDAG &DAG = CLI.DAG;
+  SDLoc &dl = CLI.DL;
+  SDValue Chain = CLI.Chain;
+  SDValue Callee = CLI.Callee;
+
+  MachineFunction &MF = DAG.getMachineFunction();
+  MachineFrameInfo *MFI = MF.getFrameInfo();
+  auto TRI = static_cast<const OR1KRegisterInfo*>(TM.getRegisterInfo());
+
+  CLI.IsTailCall = false;
+
   SmallVector<CCValAssign, 16> ArgLocs;
-  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
-                 getTargetMachine(), ArgLocs, *DAG.getContext());
-  GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee);
-  MachineFrameInfo *MFI = DAG.getMachineFunction().getFrameInfo();
-  bool IsPIC = getTargetMachine().getRelocationModel() == Reloc::PIC_;
+  OR1KCCState CCInfo(CLI.CallConv, CLI.IsVarArg, MF, getTargetMachine(),
+                     ArgLocs, *DAG.getContext());
+  CCInfo.AnalyzeCallOperands(CLI.Outs, CC_OR1K32);
 
-  NumFixedArgs = 0;
-  if (isVarArg && G) {
-    const Function* CalleeFn = dyn_cast<Function>(G->getGlobal());
-    if (CalleeFn)
-      NumFixedArgs = CalleeFn->getFunctionType()->getNumParams();
-  }
-  if (NumFixedArgs)
-    CCInfo.AnalyzeCallOperands(Outs, CC_OR1K32_VarArg);
-  else
-    CCInfo.AnalyzeCallOperands(Outs, CC_OR1K32);
+  unsigned NextStackOffset = CCInfo.getNextStackOffset();
+  SDValue SPAdjAmount = DAG.getIntPtrConstant(NextStackOffset, true);
 
-  // Get a count of how many bytes are to be pushed on the stack.
-  unsigned NumBytes = CCInfo.getNextStackOffset();
+  Chain = DAG.getCALLSEQ_START(Chain, SPAdjAmount, dl);
 
-  // Create local copies for byval args.
-  SmallVector<SDValue, 8> ByValArgs;
-  for (unsigned i = 0,  e = Outs.size(); i != e; ++i) {
-    ISD::ArgFlagsTy Flags = Outs[i].Flags;
-    if (!Flags.isByVal())
-      continue;
+  SDValue StackPtr = DAG.getCopyFromReg(Chain, dl, OR1K::R1, getPointerTy());
 
-    SDValue Arg = OutVals[i];
-    unsigned Size = Flags.getByValSize();
-    unsigned Align = Flags.getByValAlign();
-
-    int FI = MFI->CreateStackObject(Size, Align, false);
-    SDValue FIPtr = DAG.getFrameIndex(FI, getPointerTy());
-    SDValue SizeNode = DAG.getConstant(Size, MVT::i32);
-
-    Chain = DAG.getMemcpy(Chain, dl, FIPtr, Arg, SizeNode, Align,
-                          /*isVolatile=*/false,
-                          /*AlwaysInline=*/false,
-                          MachinePointerInfo(), MachinePointerInfo());
-    ByValArgs.push_back(FIPtr);
-  }
-
-  Chain = DAG.getCALLSEQ_START(Chain, DAG.getConstant(NumBytes, getPointerTy(), true), dl);
-
-  SmallVector<std::pair<unsigned, SDValue>, 4> RegsToPass;
+  SmallVector<std::pair<unsigned, SDValue>, 6> RegsToPass;
   SmallVector<SDValue, 12> MemOpChains;
-  SDValue StackPtr;
 
-  // Walk the register/memloc assignments, inserting copies/loads.
-  for (unsigned i = 0, j = 0, e = ArgLocs.size(); i != e; ++i) {
+  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
+    SDValue ArgValue = CLI.OutVals[i];
     CCValAssign &VA = ArgLocs[i];
-    SDValue Arg = OutVals[i];
-    ISD::ArgFlagsTy Flags = Outs[i].Flags;
+    ISD::ArgFlagsTy Flags = CLI.Outs[i].Flags;
+    MVT LocVT = VA.getLocVT();
 
-
-    // Promote the value if needed.
     switch (VA.getLocInfo()) {
-      default: llvm_unreachable("Unknown loc info!");
-      case CCValAssign::Full: break;
-      case CCValAssign::SExt:
-        Arg = DAG.getNode(ISD::SIGN_EXTEND, dl, VA.getLocVT(), Arg);
-        break;
-      case CCValAssign::ZExt:
-        Arg = DAG.getNode(ISD::ZERO_EXTEND, dl, VA.getLocVT(), Arg);
-        break;
-      case CCValAssign::AExt:
-        Arg = DAG.getNode(ISD::ANY_EXTEND, dl, VA.getLocVT(), Arg);
-        break;
+    default:
+      llvm_unreachable("Unsupported LocInfo!");
+    case CCValAssign::Full:
+      break;
+    case CCValAssign::SExt:
+      ArgValue = DAG.getNode(ISD::SIGN_EXTEND, dl, LocVT, ArgValue);
+      break;
+    case CCValAssign::ZExt:
+      ArgValue = DAG.getNode(ISD::ZERO_EXTEND, dl, LocVT, ArgValue);
+      break;
+    case CCValAssign::AExt:
+      ArgValue = DAG.getNode(ISD::ANY_EXTEND, dl, LocVT, ArgValue);
+      break;
     }
 
-    // Use local copy if it is a byval arg.
-    if (Flags.isByVal())
-      Arg = ByValArgs[j++];
-
-    // Arguments that can be passed on register must be kept at RegsToPass
-    // vector
     if (VA.isRegLoc()) {
-      RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
+      if (Flags.isByVal()) {
+        // On 'byval' arguments the caller must create a copy of the original
+        // argument and pass a reference to the copy.
+        unsigned Size = Flags.getByValSize();
+        unsigned Align = Flags.getByValAlign();
+
+        int FI = MFI->CreateStackObject(Size, Align, false);
+        SDValue Addr = DAG.getFrameIndex(FI, getPointerTy());
+        MemOpChains.push_back(DAG.getMemcpy(Chain, dl, Addr, ArgValue,
+                                            DAG.getConstant(Size, MVT::i32),
+                                            Align, false, false,
+                                            MachinePointerInfo(),
+                                            MachinePointerInfo()));
+        ArgValue = Addr;
+      }
+      RegsToPass.push_back(std::make_pair(VA.getLocReg(), ArgValue));
     } else {
       assert(VA.isMemLoc());
-
-      if (StackPtr.getNode() == 0)
-        StackPtr = DAG.getCopyFromReg(Chain, dl, OR1K::R1, getPointerTy());
-
-      SDValue PtrOff = DAG.getNode(ISD::ADD, dl, getPointerTy(),
-                                   StackPtr,
-                                   DAG.getIntPtrConstant(VA.getLocMemOffset()));
-
-
-      MemOpChains.push_back(DAG.getStore(Chain, dl, Arg, PtrOff,
-                                         MachinePointerInfo(),false, false, 0));
+      unsigned LocMemOffset = VA.getLocMemOffset();
+      SDValue PtrOff = DAG.getIntPtrConstant(LocMemOffset);
+      PtrOff = DAG.getNode(ISD::ADD, dl, getPointerTy(), StackPtr, PtrOff);
+      SDValue MemOp = DAG.getStore(Chain, dl, ArgValue, PtrOff,
+                                   MachinePointerInfo::getStack(LocMemOffset),
+                                   false, false, 0);
+      MemOpChains.push_back(MemOp);
     }
   }
 
-  // Transform all store nodes into one single node because all store nodes are
-  // independent of each other.
   if (!MemOpChains.empty())
     Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other,
-                        &MemOpChains[0], MemOpChains.size());
+                        MemOpChains.data(), MemOpChains.size());
 
+  // Build a sequence of copy-to-reg nodes chained together with token chain and
+  // flag operands which copy the outgoing args into registers. The InFlag is
+  // necessary since all emitted instructions must be stuck together.
   SDValue InFlag;
-  // .plt stubs expects a pointer to GOT in r16, so insert a copy
-  // from the global base reg to it
-  if (IsPIC) {
-    SDValue GlobalBase = DAG.getNode(OR1KISD::GLOBAL_BASE_REG,
-                                     SDLoc(), MVT::i32);
-    Chain = DAG.getCopyToReg(Chain, dl, OR1K::R16, GlobalBase, InFlag);
+  for (const auto &Pair : RegsToPass) {
+    Chain = DAG.getCopyToReg(Chain, dl, Pair.first, Pair.second, InFlag);
     InFlag = Chain.getValue(1);
   }
 
-  // Build a sequence of copy-to-reg nodes chained together with token chain and
-  // flag operands which copy the outgoing args into registers.  The InFlag in
-  // necessary since all emitted instructions must be stuck together.
-  for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i) {
-    Chain = DAG.getCopyToReg(Chain, dl, RegsToPass[i].first,
-                             RegsToPass[i].second, InFlag);
+  bool IsPIC = getTargetMachine().getRelocationModel() == Reloc::PIC_;
+
+  if (IsPIC) {
+    SDValue GP = DAG.getNode(OR1KISD::GLOBAL_BASE_REG, dl, MVT::i32);
+    Chain = DAG.getCopyToReg(Chain, dl, TRI->getGlobalBaseRegister(),
+                             GP, InFlag);
     InFlag = Chain.getValue(1);
   }
 
@@ -672,69 +663,56 @@ OR1KTargetLowering::LowerCCCCallTo(SDValue Chain, SDValue Callee,
   // turn it into a TargetGlobalAddress node so that legalize doesn't hack it.
   // Likewise ExternalSymbol -> TargetExternalSymbol.
   uint8_t OpFlag = IsPIC ? OR1KII::MO_PLT26 : OR1KII::MO_NO_FLAG;
-  if (G) {
-    Callee = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0,
-                                        OpFlag);
-  } else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
+  if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee))
+    Callee = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(),
+                                        0, OpFlag);
+  else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee))
     Callee = DAG.getTargetExternalSymbol(E->getSymbol(), getPointerTy(),
                                          OpFlag);
-  }
 
-  // Returns a chain & a flag for retval copy to use.
-  SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
-  SmallVector<SDValue, 8> Ops;
+  SmallVector<SDValue, 16> Ops;
   Ops.push_back(Chain);
   Ops.push_back(Callee);
 
-  // Add argument registers to the end of the list so that they are
-  // known live into the call.
-  for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i)
-    Ops.push_back(DAG.getRegister(RegsToPass[i].first,
-                                  RegsToPass[i].second.getValueType()));
+  for (const auto &Pair : RegsToPass)
+    Ops.push_back(DAG.getRegister(Pair.first, Pair.second.getValueType()));
+
+  if (IsPIC)
+    Ops.push_back(DAG.getRegister(TRI->getGlobalBaseRegister(), MVT::i32));
 
   if (InFlag.getNode())
     Ops.push_back(InFlag);
 
-  Chain = DAG.getNode(OR1KISD::CALL, dl, NodeTys, &Ops[0], Ops.size());
+  SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
+  Chain = DAG.getNode(OR1KISD::CALL, dl, NodeTys, Ops.data(), Ops.size());
   InFlag = Chain.getValue(1);
 
-  // Create the CALLSEQ_END node.
-  Chain = DAG.getCALLSEQ_END(Chain,
-                             DAG.getConstant(NumBytes, getPointerTy(), true),
-                             DAG.getConstant(0, getPointerTy(), true),
-                             InFlag,
-                             dl);
+  Chain = DAG.getCALLSEQ_END(Chain, SPAdjAmount,
+                             DAG.getIntPtrConstant(0, true), InFlag, dl);
   InFlag = Chain.getValue(1);
 
-  // Handle result values, copying them out of physregs into vregs that we
-  // return.
-  return LowerCallResult(Chain, InFlag, CallConv, isVarArg, Ins, dl,
-                         DAG, InVals);
+  return LowerCallResult(Chain, InFlag, CLI.CallConv, CLI.IsVarArg, CLI.Ins,
+                         dl, DAG, InVals);
 }
 
-/// LowerCallResult - Lower the result values of a call into the
-/// appropriate copies out of appropriate physical registers.
-///
-SDValue
-OR1KTargetLowering::LowerCallResult(SDValue Chain, SDValue InFlag,
-                                    CallingConv::ID CallConv, bool isVarArg,
-                                    const SmallVectorImpl<ISD::InputArg> &Ins,
-                                    SDLoc dl, SelectionDAG &DAG,
-                                    SmallVectorImpl<SDValue> &InVals) const {
 
-  // Assign locations to each value returned by this call.
+SDValue OR1KTargetLowering::
+LowerCallResult(SDValue Chain, SDValue InFlag, CallingConv::ID CallConv,
+                bool IsVarArg, const SmallVectorImpl<ISD::InputArg> &Ins,
+                SDLoc dl, SelectionDAG &DAG,
+                SmallVectorImpl<SDValue> &InVals) const {
   SmallVector<CCValAssign, 16> RVLocs;
-  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
-                 getTargetMachine(), RVLocs, *DAG.getContext());
+  OR1KCCState CCInfo(CallConv, IsVarArg, DAG.getMachineFunction(),
+                     getTargetMachine(), RVLocs, *DAG.getContext());
 
   CCInfo.AnalyzeCallResult(Ins, RetCC_OR1K32);
 
-  // Copy all of the result registers out of their specified physreg.
-  for (unsigned i = 0; i != RVLocs.size(); ++i) {
-    Chain = DAG.getCopyFromReg(Chain, dl, RVLocs[i].getLocReg(),
-                               RVLocs[i].getValVT(), InFlag).getValue(1);
+  for (const CCValAssign &VA : RVLocs) {
+    SDValue Value = DAG.getCopyFromReg(Chain, dl, VA.getLocReg(),
+                                       VA.getValVT(), InFlag);
+    Chain = Value.getValue(1);
     InFlag = Chain.getValue(2);
-    InVals.push_back(Chain.getValue(0));
+    InVals.push_back(Value);
   }
 
   return Chain;
@@ -860,19 +838,89 @@ SDValue OR1KTargetLowering::LowerSELECT_CC(SDValue Op,
   return DAG.getNode(OR1KISD::SELECT_CC, dl, VTs, &Ops[0], Ops.size());
 }
 
-SDValue OR1KTargetLowering::LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
+static SDValue LowerVASTART_NewABI(SDValue Op, SelectionDAG &DAG) {
   MachineFunction &MF = DAG.getMachineFunction();
-  OR1KMachineFunctionInfo *FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
+  OR1KMachineFunctionInfo::VarArgsInfo &VAInfo = FuncInfo->getVarArgsInfo();
 
   SDLoc dl(Op);
-  SDValue FI = DAG.getFrameIndex(FuncInfo->getVarArgsFrameIndex(),
-                                 getPointerTy());
-
-  // vastart just stores the address of the VarArgsFrameIndex slot into the
-  // memory location argument.
+  SDValue Chain = Op.getOperand(0);
+  SDValue VaListBasePtr = Op.getOperand(1);
   const Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
-  return DAG.getStore(Op.getOperand(0), dl, FI, Op.getOperand(1),
-                      MachinePointerInfo(SV), false, false, 0);
+
+  SDValue Value, Ptr, Offset;
+  MVT PtrVT = MVT::i32;
+
+  // Initialize GPR size.
+  Value = DAG.getConstant(VAInfo.AllocatedGPR, MVT::i32);
+  Ptr = VaListBasePtr;
+  Chain = DAG.getStore(Chain, dl, Value, Ptr, MachinePointerInfo(SV, 0),
+                       false, false, 0);
+
+  // Initialize stack area pointer.
+  Value = DAG.getFrameIndex(VAInfo.StackAreaFI, PtrVT);
+  Ptr = DAG.getNode(ISD::ADD, dl, PtrVT, VaListBasePtr,
+                    DAG.getConstant(4, PtrVT));
+  Chain = DAG.getStore(Chain, dl, Value, Ptr, MachinePointerInfo(SV, 4),
+                       false, false, 0);
+
+  // Initialize regsave area pointer.
+  Value = VAInfo.AllocatedGPR < 24
+            ? DAG.getFrameIndex(VAInfo.RegSaveAreaFI, PtrVT)
+            : DAG.getConstant(0, PtrVT);
+  Ptr = DAG.getNode(ISD::ADD, dl, PtrVT, VaListBasePtr,
+                    DAG.getConstant(8, PtrVT));
+  Chain = DAG.getStore(Chain, dl, Value, Ptr, MachinePointerInfo(SV, 8),
+                       false, false, 0);
+
+  return Chain;
+}
+
+static SDValue LowerVASTART_DefaultABI(SDValue Op, SelectionDAG &DAG) {
+  MachineFunction &MF = DAG.getMachineFunction();
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
+  OR1KMachineFunctionInfo::VarArgsInfo &VAInfo = FuncInfo->getVarArgsInfo();
+
+  SDLoc dl(Op);
+  SDValue Chain = Op.getOperand(0);
+  SDValue VaListBasePtr = Op.getOperand(1);
+
+  MVT PtrVT = MVT::i32;
+
+  // vastart just stores the address of the VarArgsArea slot into the
+  // memory location argument.
+  SDValue Value = DAG.getFrameIndex(VAInfo.VarArgsAreaFI, PtrVT);
+  const llvm::Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
+  return DAG.getStore(Chain, dl, Value, VaListBasePtr, MachinePointerInfo(SV),
+                      false, false, 0);
+}
+
+SDValue OR1KTargetLowering::LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
+  if (Subtarget.isNewABI())
+    return LowerVASTART_NewABI(Op, DAG);
+
+  return LowerVASTART_DefaultABI(Op, DAG);
+}
+
+static SDValue LowerVACOPY_NewABI(SDValue Op, SelectionDAG &DAG) {
+  SDValue Chain = Op.getOperand(0);
+  SDValue DstPtr = Op.getOperand(1);
+  SDValue SrcPtr = Op.getOperand(2);
+  const Value *DstSV = cast<SrcValueSDNode>(Op.getOperand(3))->getValue();
+  const Value *SrcSV = cast<SrcValueSDNode>(Op.getOperand(4))->getValue();
+  SDLoc dl(Op);
+
+  return DAG.getMemcpy(Chain, dl, DstPtr, SrcPtr,
+                       DAG.getConstant(12, MVT::i32), 4, false, true,
+                       MachinePointerInfo(DstSV), MachinePointerInfo(SrcSV));
+}
+
+SDValue OR1KTargetLowering::LowerVACOPY(SDValue Op, SelectionDAG &DAG) const {
+  if (Subtarget.isNewABI())
+    return LowerVACOPY_NewABI(Op, DAG);
+
+  // Fallback on default expansion.
+  return SDValue();
 }
 
 /// LowerCTTZ - Lower count of leading zeros

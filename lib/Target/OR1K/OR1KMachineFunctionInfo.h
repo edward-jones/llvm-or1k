@@ -20,13 +20,19 @@
 namespace llvm {
 
 class OR1KMachineFunctionInfo : public MachineFunctionInfo {
+public:
+  struct VarArgsInfo {
+    unsigned AllocatedGPR;
+    int StackAreaFI;
+    int RegSaveAreaFI;
+    int VarArgsAreaFI;
 
-  /// VarArgsFrameIndex - FrameIndex for start of varargs area.
-  int VarArgsFrameIndex;
+    VarArgsInfo() : AllocatedGPR(0), StackAreaFI(0), RegSaveAreaFI(0) {}
+  };
 
 public:
   OR1KMachineFunctionInfo(MachineFunction &MF)
-   : SRetReg(0), GlobalBaseReg(0),
+   : SRetReg(0), GlobalBaseReg(0), RegSaveAreaSize(0),
      ReturnAddressFI(0), FramePointerFI(0), BasePointerFI(0) {}
 
   bool hasSRetReturnReg() const { return SRetReg != 0; }
@@ -36,8 +42,8 @@ public:
   unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
   void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
 
-  int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
-  void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+  unsigned getRegSaveAreaSize() const { return RegSaveAreaSize; }
+  void setRegSaveAreaSize(unsigned Size) { RegSaveAreaSize = Size; }
 
   bool hasReturnAddressStackSlot() const { return ReturnAddressFI < 0; }
   int getReturnAddressFI() const { return ReturnAddressFI; }
@@ -57,12 +63,28 @@ public:
            (hasBasePointerStackSlot() && FI == BasePointerFI);
   }
 
+  bool isVariadic() const { return IsVariadic; }
+  void setVariadic(bool VA) { IsVariadic = VA; }
+
+  const VarArgsInfo &getVarArgsInfo() const {
+    assert(IsVariadic);
+    return VAInfo;
+  }
+
+  VarArgsInfo &getVarArgsInfo() {
+    assert(IsVariadic);
+    return VAInfo;
+  }
+
 private:
   unsigned SRetReg;
   unsigned GlobalBaseReg;
+  unsigned RegSaveAreaSize;
   int ReturnAddressFI;
   int FramePointerFI;
   int BasePointerFI;
+  bool IsVariadic;
+  VarArgsInfo VAInfo;
 };
 
 } // End llvm namespace

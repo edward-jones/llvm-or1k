@@ -224,6 +224,7 @@ processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
   bool IsPIC = MF.getTarget().getRelocationModel() == Reloc::PIC_;
 
   int64_t StackOffset = 0;
+  StackOffset -= FuncInfo->getRegSaveAreaSize();
   unsigned RegSize = OR1K::GPRRegClass.getSize();
 
   if (MFI->hasCalls() || !MRI.def_empty(TRI->getRARegister())) {

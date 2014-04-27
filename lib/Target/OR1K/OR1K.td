@@ -51,6 +51,9 @@ def FeatureSFII  : SubtargetFeature<"sfii", "HasSFII", "true",
 def FeatureFBit  : SubtargetFeature<"fbit", "HasFBit", "true",
                                     "Enable find first/last bit set instructions">;
 
+def NewABI       : SubtargetFeature<"abi-new", "OR1KABI", "NewABI",
+                                    "Enable the NewABI">;
+
 //===----------------------------------------------------------------------===//
 // OR1K processors supported.
 //===----------------------------------------------------------------------===//

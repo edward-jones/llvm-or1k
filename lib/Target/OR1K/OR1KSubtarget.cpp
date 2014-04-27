@@ -25,16 +25,9 @@ void OR1KSubtarget::anchor() { }
 
 OR1KSubtarget::OR1KSubtarget(const std::string &TT,
                              const std::string &CPU, const std::string &FS)
-  : OR1KGenSubtargetInfo(TT, CPU, FS),
-    HasMul(false),
-    HasDiv(false),
-    HasRor(false),
-    HasCmov(false),
-    HasMAC(false),
-    HasExt(false),
-    HasSFII(false),
-    HasFBit(false)
-{
+ : OR1KGenSubtargetInfo(TT, CPU, FS), OR1KABI(DefaultABI),
+   HasMul(false), HasDiv(false), HasRor(false), HasCmov(false),
+   HasMAC(false), HasExt(false), HasSFII(false), HasFBit(false) {
   std::string CPUName = CPU;
   if (CPUName.empty())
     CPUName = "generic";
