@@ -58,6 +58,7 @@ def FeatureFBit  : SubtargetFeature<"fbit", "HasFBit", "true",
 def OR1KSchedMachineModel : SchedMachineModel {
   let Itineraries = OR1KGenericItineraries;
   let IssueWidth = 1;
+  let LoadLatency = 2;
 }
 
 def : ProcessorModel<"generic", OR1KSchedMachineModel,

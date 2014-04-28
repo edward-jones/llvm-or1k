@@ -11,6 +11,7 @@
 // Functional units.
 //===----------------------------------------------------------------------===//
 def FU_ALU : FuncUnit;
+def FU_MUL : FuncUnit;
 def FU_FPU : FuncUnit;
 
 //===----------------------------------------------------------------------===//
@@ -105,7 +106,7 @@ def II_SET_FLAG_D : InstrItinClass;
 //===----------------------------------------------------------------------===//
 // OR1K Generic instruction itineraries.
 //===----------------------------------------------------------------------===//
-def OR1KGenericItineraries : ProcessorItineraries<[FU_ALU, FU_FPU], [], [
+def OR1KGenericItineraries : ProcessorItineraries<[FU_ALU, FU_MUL, FU_FPU], [], [
   InstrItinData< II_ALU             , [InstrStage<1,  [FU_ALU]>]>,
   InstrItinData< II_BRANCH          , [InstrStage<1,  [FU_ALU]>]>,
   InstrItinData< II_CMOV            , [InstrStage<1,  [FU_ALU]>]>,
@@ -115,7 +116,7 @@ def OR1KGenericItineraries : ProcessorItineraries<[FU_ALU, FU_FPU], [], [
   InstrItinData< II_MOVHI           , [InstrStage<1,  [FU_ALU]>]>,
   InstrItinData< II_LOAD            , [InstrStage<1,  [FU_ALU]>]>,
   InstrItinData< II_MOVE_SPR        , [InstrStage<1,  [FU_ALU]>]>,
-  InstrItinData< II_MUL             , [InstrStage<1,  [FU_ALU]>]>,
+  InstrItinData< II_MUL             , [InstrStage<2,  [FU_MUL]>]>,
   InstrItinData< II_NOP             , [InstrStage<1,  [FU_ALU]>]>,
   InstrItinData< II_ROT             , [InstrStage<1,  [FU_ALU]>]>,
   InstrItinData< II_SET_FLAG_IF     , [InstrStage<1,  [FU_ALU]>]>,
