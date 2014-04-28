@@ -33,17 +33,16 @@ namespace llvm {
 namespace {
 
   class OR1KTTI final : public ImmutablePass, public TargetTransformInfo {
-    const OR1KTargetMachine *TM;
     const OR1KSubtarget *ST;
     const OR1KTargetLowering *TLI;
 
   public:
-    OR1KTTI() : ImmutablePass(ID), TM(0), ST(0), TLI(0) {
+    OR1KTTI() : ImmutablePass(ID), ST(0), TLI(0) {
       llvm_unreachable("This pass cannot be directly constructed");
     }
 
     OR1KTTI(const OR1KTargetMachine *TM)
-    : ImmutablePass(ID), TM(TM), ST(TM->getSubtargetImpl()),
+      : ImmutablePass(ID), ST(TM->getSubtargetImpl()),
     TLI(TM->getTargetLowering()) {
       initializeOR1KTTIPass(*PassRegistry::getPassRegistry());
     }
