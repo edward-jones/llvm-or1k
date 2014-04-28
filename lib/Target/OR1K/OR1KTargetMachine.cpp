@@ -17,6 +17,7 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/IR/IRPrintingPasses.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -24,6 +25,12 @@
 #include "llvm/Transforms/Scalar.h"
 
 using namespace llvm;
+
+static cl::opt<bool> DisableOR1KCustomLSR(
+  "disable-or1k-custom-lsr",
+  cl::init(false),
+  cl::desc("Disable custom OR1K custom LSR"),
+  cl::Hidden);
 
 extern "C" void LLVMInitializeOR1KTarget() {
   // Register the target.
@@ -105,7 +112,10 @@ void OR1KPassConfig::addIRPasses() {
 
   // Run loop strength reduction before anything else.
   if (getOptLevel() != CodeGenOpt::None) {
-    addPass(createOR1KLoopStrengthReduction());
+    if (!DisableOR1KCustomLSR)
+      addPass(createOR1KLoopStrengthReduction());
+
+    addPass(createLoopStrengthReducePass());
   }
 
   addPass(createGCLoweringPass());
