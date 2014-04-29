@@ -6,4 +6,4 @@ entry:
 }
 
 ; CHECK: ret0:
-; CHECK: l.movhi r11, 0
+; CHECK: l.ori r11, r0, 0

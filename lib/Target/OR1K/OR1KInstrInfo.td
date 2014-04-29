@@ -835,6 +835,9 @@ def : Pat<(or GPR:$hi, (OR1KLo tjumptable:$lo)),
 def : Pat<(or GPR:$hi, (OR1KLo tconstpool:$lo)),
           (ORI GPR:$hi, tconstpool:$lo)>;
 
+// We have R0 always set to zero!
+def : Pat<(i32 0), (i32 (COPY (i32 R0)))>;
+
 //===----------------------------------------------------------------------===//
 // Assembler Alias
 //===----------------------------------------------------------------------===//
