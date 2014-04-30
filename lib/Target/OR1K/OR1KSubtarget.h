@@ -25,17 +25,11 @@
 namespace llvm {
 
 class OR1KSubtarget : public OR1KGenSubtargetInfo {
-  virtual void anchor();
-  bool HasMul;
-  bool HasDiv;
-  bool HasRor;
-  bool HasCmov;
-  bool HasMAC;
-  bool HasExt;
-  bool HasSFII;
-  bool HasFBit;
-  
-  InstrItineraryData InstrItins;
+public:
+  enum ABIKind {
+    DefaultABI, NewABI
+  };
+
 public:
   /// This constructor initializes the data members to match that
   /// of the specified triple.
@@ -55,12 +49,30 @@ public:
   bool hasExt()    const { return HasExt; }
   bool hasSFII()   const { return HasSFII; }
   bool hasFBit()   const { return HasFBit; }
+
+  bool isDefaultABI() const { return OR1KABI == DefaultABI; }
+  bool isNewABI() const { return OR1KABI == NewABI; }
   
   const InstrItineraryData &getInstrItineraryData() const { return InstrItins; }
   
   bool enablePostRAScheduler(CodeGenOpt::Level OptLevel,
                              AntiDepBreakMode& Mode,
                              RegClassVector& CriticalPathRCs) const override;
+
+private:
+  virtual void anchor();
+
+private:
+  ABIKind OR1KABI;
+  InstrItineraryData InstrItins;
+  bool HasMul;
+  bool HasDiv;
+  bool HasRor;
+  bool HasCmov;
+  bool HasMAC;
+  bool HasExt;
+  bool HasSFII;
+  bool HasFBit;
 };
 } // End llvm namespace
 

@@ -15,6 +15,6 @@ entry:
 ; r3 is our frame index for the dynamic stack allocation,
 ; check that it is adjusted so there is room for the argument
 ; that is passed on the stack to bar()
-; CHECK: l.addi  r3, r3, 4
+; CHECK: l.addi  r1, r1, -4
 
 declare void @bar(i32, i32, i32, i32, i32, i32, i32)

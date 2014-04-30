@@ -26,233 +26,189 @@ bool OR1KFrameLowering::hasFP(const MachineFunction &MF) const {
   const MachineFrameInfo *MFI = MF.getFrameInfo();
   const TargetRegisterInfo *TRI = MF.getTarget().getRegisterInfo();
 
-  return (MF.getTarget().Options.DisableFramePointerElim(MF) ||
-          MF.getFrameInfo()->hasVarSizedObjects() ||
-          MFI->isFrameAddressTaken() ||
-          TRI->needsStackRealignment(MF));
+  return MF.getTarget().Options.DisableFramePointerElim(MF) ||
+         MFI->hasVarSizedObjects() ||
+         MFI->isFrameAddressTaken() ||
+         TRI->needsStackRealignment(MF);
 }
 
-// determineFrameLayout - Determine the size of the frame and maximum call
-/// frame size.
-void OR1KFrameLowering::determineFrameLayout(MachineFunction &MF) const {
-  MachineFrameInfo *MFI = MF.getFrameInfo();
+bool OR1KFrameLowering::hasBP(const MachineFunction &MF) const {
+  const MachineFrameInfo *MFI = MF.getFrameInfo();
   const TargetRegisterInfo *TRI = MF.getTarget().getRegisterInfo();
 
-  // Get the number of bytes to allocate from the FrameInfo.
-  unsigned FrameSize = MFI->getStackSize();
-
-  // Get the alignment.
-  unsigned StackAlign = TRI->needsStackRealignment(MF) ?
-    MFI->getMaxAlignment() :
-    MF.getTarget().getFrameLowering()->getStackAlignment();
-
-  // Get the maximum call frame size of all the calls.
-  unsigned maxCallFrameSize = MFI->getMaxCallFrameSize();
-
-  // If we have dynamic alloca then maxCallFrameSize needs to be aligned so
-  // that allocations will be aligned.
-  if (MFI->hasVarSizedObjects())
-    maxCallFrameSize = RoundUpToAlignment(maxCallFrameSize, StackAlign);
-
-  // Update maximum call frame size.
-  MFI->setMaxCallFrameSize(maxCallFrameSize);
-
-   // Include call frame size in total.
-  if (!(hasReservedCallFrame(MF) && MFI->adjustsStack()))
-    FrameSize += maxCallFrameSize;
-
-  // Make sure the frame is aligned.
-  FrameSize = RoundUpToAlignment(FrameSize, StackAlign);
-
-  // Update frame info.
-  MFI->setStackSize(FrameSize);
+  return MFI->hasVarSizedObjects() && TRI->needsStackRealignment(MF);
 }
 
-// Iterates through each basic block in a machine function and replaces
-// ADJDYNALLOC pseudo instructions with a OR1K:ADDI with the
-// maximum call frame size as the immediate.
-void OR1KFrameLowering::replaceAdjDynAllocPseudo(MachineFunction &MF) const {
-  const OR1KInstrInfo &TII =
-    *static_cast<const OR1KInstrInfo*>(MF.getTarget().getInstrInfo());
-  unsigned MaxCallFrameSize = MF.getFrameInfo()->getMaxCallFrameSize();
+bool OR1KFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
+  const MachineFrameInfo *MFI = MF.getFrameInfo();
+  return !MFI->hasVarSizedObjects();
+}
 
-  for (MachineFunction::iterator MBB = MF.begin(), E = MF.end();
-      MBB != E; ++MBB) {
-    MachineBasicBlock::iterator MBBI = MBB->begin();
-    while (MBBI != MBB->end()) {
-      MachineInstr *MI = MBBI++;
-      if (MI->getOpcode() == OR1K::ADJDYNALLOC) {
-        DebugLoc DL = MI->getDebugLoc();
-        unsigned Dst = MI->getOperand(0).getReg();
-        unsigned Src = MI->getOperand(1).getReg();
+void OR1KFrameLowering::
+emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
+             DebugLoc DL, const TargetInstrInfo &TII, unsigned StackSize,
+             unsigned DestReg, unsigned TmpReg, bool OnEpilogue) const {
+  const unsigned SPReg = OR1K::R1;
 
-        BuildMI(*MBB, MI, DL, TII.get(OR1K::ADDI), Dst)
-          .addReg(Src).addImm(MaxCallFrameSize);
-        MI->eraseFromParent();
-      }
-    }
+  int64_t StackSizeAddend = OnEpilogue ? StackSize : -(int64_t)StackSize;
+
+  if (StackSize == 0) {
+    if (DestReg != SPReg)
+      BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), DestReg)
+       .addReg(SPReg).addImm(0);
+
+    return;
   }
+
+  if (isInt<16>(StackSizeAddend)) {
+    // l.addi rD, r1, -stack_size
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ADDI), DestReg)
+     .addReg(SPReg).addImm(StackSizeAddend);
+    return;
+  }
+
+  // l.movhi rT, hi(stack_size)
+  // l.ori rT, rT, lo(stack_size)
+  BuildMI(MBB, MBBI, DL, TII.get(OR1K::MOVHI), TmpReg)
+   .addImm(StackSize >> 16);
+  BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), TmpReg)
+   .addReg(TmpReg).addImm(StackSize & 0xFFFFU);
+
+  if (OnEpilogue)
+    // l.add rD, r1, rT
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ADD), DestReg)
+     .addReg(SPReg).addReg(TmpReg);
+  else
+    // l.sub rD, r1, rT
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::SUB), DestReg)
+     .addReg(SPReg).addReg(TmpReg);
 }
 
 void OR1KFrameLowering::emitPrologue(MachineFunction &MF) const {
-  MachineBasicBlock &MBB   = MF.front();
-  MachineFrameInfo *MFI    = MF.getFrameInfo();
-  const OR1KInstrInfo &TII =
-    *static_cast<const OR1KInstrInfo*>(MF.getTarget().getInstrInfo());
-  const OR1KRegisterInfo *TRI =
-    static_cast<const OR1KRegisterInfo*>(MF.getTarget().getRegisterInfo());
+  MachineBasicBlock &MBB = MF.front();
+  MachineFrameInfo *MFI = MF.getFrameInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  const TargetMachine &TM = MF.getTarget();
+  const TargetInstrInfo &TII = *TM.getInstrInfo();
+  auto TRI = static_cast<const OR1KRegisterInfo*>(TM.getRegisterInfo());
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
+
   MachineBasicBlock::iterator MBBI = MBB.begin();
   DebugLoc DL = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
-  bool IsPIC = MF.getTarget().getRelocationModel() == Reloc::PIC_;
-  bool HasRA = MFI->adjustsStack() || IsPIC;
 
-  // Determine the correct frame layout
-  determineFrameLayout(MF);
-
-  // Get the number of bytes to allocate from the FrameInfo.
   unsigned StackSize = MFI->getStackSize();
 
-  // No need to allocate space on the stack.
-  if (StackSize == 0 && !HasRA) return;
+  const unsigned SPReg = OR1K::R1;
+  const TargetRegisterClass *RC = &OR1K::GPRRegClass;
 
-  int Offset = -4;
+  if (FuncInfo->hasReturnAddressStackSlot()) {
+    unsigned RAReg = TRI->getRARegister();
+    int FI = FuncInfo->getReturnAddressFI();
 
-  // l.sw  stack_lock(r1), r9
-  if (HasRA) {
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::SW))
-      .addReg(OR1K::R9).addReg(OR1K::R1).addImm(Offset);
-    Offset -= 4;
+    // l.sw ra_ss(r1), r9
+    TII.storeRegToStackSlot(MBB, MBBI, RAReg, true, FI, RC, TRI);
   }
 
-  if (hasFP(MF)) {
-    // Save frame pointer onto stack
-    // l.sw  stack_loc(r1), r2
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::SW))
-      .addReg(OR1K::R2).addReg(OR1K::R1).addImm(Offset);
-    Offset -= 4;
+  if (FuncInfo->hasFramePointerStackSlot()) {
+    unsigned FPReg = TRI->getFrameRegister(MF);
+    int FI = FuncInfo->getFramePointerFI();
 
-    // In case of a base pointer, it need to be saved here
-    // before we start modifying it below.
-    // l.sw stack_loc(r1), basereg
-    if (TRI->hasBasePointer(MF)) {
-      BuildMI(MBB, MBBI, DL, TII.get(OR1K::SW))
-        .addReg(TRI->getBaseRegister()).addReg(OR1K::R1).addImm(Offset);
-    }
+    // l.sw fp_ss(r1), r2
+    TII.storeRegToStackSlot(MBB, MBBI, FPReg, true, FI, RC, TRI);
 
-    // Set frame pointer to stack pointer
-    // l.addi r2, r1, 0
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ADDI), OR1K::R2)
-      .addReg(OR1K::R1).addImm(0);
+    // l.ori r2, r1, 0
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), FPReg)
+      .addReg(SPReg).addImm(0);
   }
 
-  // FIXME: Allocate a scratch register.
-  unsigned ScratchReg = OR1K::R13;
+  if (FuncInfo->hasBasePointerStackSlot()) {
+    unsigned BPReg = TRI->getBaseRegister();
+    int FI = FuncInfo->getBasePointerFI();
+
+    // l.sw bp_ss(r1), r14
+    TII.storeRegToStackSlot(MBB, MBBI, BPReg, true, FI, RC, TRI);
+  }
+
+  unsigned ScratchReg = MRI.createVirtualRegister(&OR1K::GPRRegClass);
+
   if (TRI->needsStackRealignment(MF)) {
     assert(hasFP(MF) && "Stack realignment without FP not supported");
-    uint32_t AlignLog =  Log2_32(MFI->getMaxAlignment());
-    // Realign the stackpointer by masking out the lower
-    // bits, i.e. r1 <= (r1 - stacksize) & ~alignmask.
-    // Since the stack grows down, the resulting stack pointer
-    // will be rounded down in case the stack pointer came in unaligned.
-    if (isInt<16>(StackSize)) {
-      BuildMI(MBB, MBBI, DL, TII.get(OR1K::ADDI), ScratchReg)
-        .addReg(OR1K::R1).addImm(-StackSize);
-    } else {
-      BuildMI(MBB, MBBI, DL, TII.get(OR1K::MOVHI), ScratchReg)
-        .addImm((uint32_t)-StackSize >> 16);
-      BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), ScratchReg)
-        .addReg(ScratchReg).addImm(-StackSize & 0xffffU);
-      BuildMI(MBB, MBBI, DL, TII.get(OR1K::ADD), ScratchReg)
-        .addReg(ScratchReg).addReg(OR1K::R1);
-    }
+    unsigned AlignLog = Log2_32(MFI->getMaxAlignment());
+
+    // Materialize in rT the new stack pointer value.
+    emitSPUpdate(MBB, MBBI, DL, TII, StackSize, ScratchReg, ScratchReg, false);
+
+    // l.srl rT, rT, AlignLog
+    // l.sll r1, rT, AlignLog
     BuildMI(MBB, MBBI, DL, TII.get(OR1K::SRL_ri), ScratchReg)
-      .addReg(ScratchReg).addImm(AlignLog);
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::SLL_ri), OR1K::R1)
-      .addReg(ScratchReg).addImm(AlignLog);
-  } else if (isInt<16>(StackSize)) {
-    // Adjust stack : l.addi r1, r1, -imm
-    if (StackSize) {
-      BuildMI(MBB, MBBI, DL, TII.get(OR1K::ADDI), OR1K::R1)
-        .addReg(OR1K::R1).addImm(-StackSize);
-    }
+     .addReg(ScratchReg).addImm(AlignLog);
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::SLL_ri), SPReg)
+     .addReg(ScratchReg, RegState::Kill).addImm(AlignLog);
   } else {
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::MOVHI), ScratchReg)
-      .addImm((uint32_t)-StackSize >> 16);
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), ScratchReg)
-      .addReg(ScratchReg).addImm(-StackSize & 0xffffU);
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ADD), OR1K::R1)
-      .addReg(OR1K::R1).addReg(ScratchReg);
+    // Inplace update of the stack pointer value.
+    emitSPUpdate(MBB, MBBI, DL, TII, StackSize, SPReg, ScratchReg, false);
   }
 
-  // If a base pointer is needed, set it up here.
-  // Any variable sized objects will be located after this,
-  // so local objects can be adressed with the base pointer.
-  if (TRI->hasBasePointer(MF)) {
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), TRI->getBaseRegister())
-      .addReg(OR1K::R1).addImm(0);
-  }
+  if (FuncInfo->hasBasePointerStackSlot()) {
+    unsigned BPReg = TRI->getBaseRegister();
 
-  if (MFI->hasVarSizedObjects()) {
-    replaceAdjDynAllocPseudo(MF);
+    // l.ori r14, r1, 0
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), BPReg)
+      .addReg(SPReg).addImm(0);
   }
 }
 
 void OR1KFrameLowering::emitEpilogue(MachineFunction &MF,
                                     MachineBasicBlock &MBB) const {
+  MachineFrameInfo *MFI = MF.getFrameInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  const TargetMachine &TM = MF.getTarget();
+  const TargetInstrInfo &TII = *TM.getInstrInfo();
+  auto TRI = static_cast<const OR1KRegisterInfo*>(TM.getRegisterInfo());
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
+
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
-  MachineFrameInfo *MFI            = MF.getFrameInfo();
-  const OR1KInstrInfo &TII =
-    *static_cast<const OR1KInstrInfo*>(MF.getTarget().getInstrInfo());
-  const OR1KRegisterInfo *TRI =
-    static_cast<const OR1KRegisterInfo*>(MF.getTarget().getRegisterInfo());
-  bool IsPIC = MF.getTarget().getRelocationModel() == Reloc::PIC_;
-  bool HasRA = MFI->adjustsStack() || IsPIC;
-  DebugLoc dl = MBBI->getDebugLoc();
+  DebugLoc DL = MBBI->getDebugLoc();
 
-  int FPOffset = HasRA ? -8 : -4;
-  int RAOffset = -4;
-  int BPOffset = FPOffset - 4;
+  unsigned StackSize = MFI->getStackSize();
 
-  // Get the number of bytes from FrameInfo
-  int StackSize = (int) MFI->getStackSize();
+  const unsigned SPReg = OR1K::R1;
+  const TargetRegisterClass *RC = &OR1K::GPRRegClass;
+  unsigned ScratchReg = MRI.createVirtualRegister(&OR1K::GPRRegClass);
 
-  if (hasFP(MF)) {
-    // Set stack pointer to frame pointer
-    // l.addi r1, r2, 0
-    BuildMI(MBB, MBBI, dl, TII.get(OR1K::ADDI), OR1K::R1)
-      .addReg(OR1K::R2).addImm(0);
+  if (FuncInfo->hasFramePointerStackSlot()) {
+    unsigned FPReg = TRI->getFrameRegister(MF);
 
-    // Load frame pointer from stack
-    // l.lwz  r2, stack_loc(r1)
-    BuildMI(MBB, MBBI, dl, TII.get(OR1K::LWZ), OR1K::R2)
-      .addReg(OR1K::R1).addImm(FPOffset);
-  } else if (isInt<16>(StackSize)) {
-    // l.addi r1, r1, imm
-    if (StackSize) {
-      BuildMI(MBB, MBBI, dl, TII.get(OR1K::ADDI), OR1K::R1)
-        .addReg(OR1K::R1).addImm(StackSize);
-    }
+    // l.ori r1, r2, 0
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), SPReg)
+     .addReg(FPReg).addImm(0);
   } else {
-    // FIXME: Allocate a scratch register.
-    unsigned ScratchReg = OR1K::R13;
-    BuildMI(MBB, MBBI, dl, TII.get(OR1K::MOVHI), ScratchReg)
-      .addImm((uint32_t)StackSize >> 16);
-    BuildMI(MBB, MBBI, dl, TII.get(OR1K::ORI), ScratchReg)
-      .addReg(ScratchReg).addImm(StackSize & 0xffffU);
-    BuildMI(MBB, MBBI, dl, TII.get(OR1K::ADD), OR1K::R1)
-      .addReg(OR1K::R1).addReg(ScratchReg);
+    assert(!hasBP(MF) && "Unexpected BP without FP.");
+    emitSPUpdate(MBB, MBBI, DL, TII, StackSize, SPReg, ScratchReg, true);
   }
 
-  // l.lwz basereg, stack_loc(r1)
-  if (TRI->hasBasePointer(MF)) {
-    BuildMI(MBB, MBBI, dl, TII.get(OR1K::LWZ), TRI->getBaseRegister())
-      .addReg(OR1K::R1).addImm(BPOffset);
+  if (FuncInfo->hasBasePointerStackSlot()) {
+    unsigned BPReg = TRI->getBaseRegister();
+    int FI = FuncInfo->getBasePointerFI();
+
+    // l.lwz r14, bp_ss(r1)
+    TII.loadRegFromStackSlot(MBB, MBBI, BPReg, FI, RC, TRI);
   }
 
-  // l.lwz r9, stack_loc(r1)
-  if (HasRA) {
-    BuildMI(MBB, MBBI, dl, TII.get(OR1K::LWZ), OR1K::R9)
-      .addReg(OR1K::R1).addImm(RAOffset);
+  if (FuncInfo->hasFramePointerStackSlot()) {
+    unsigned FPReg = TRI->getFrameRegister(MF);
+    int FI = FuncInfo->getFramePointerFI();
+
+    // l.lwz r2, fp_ss(r1)
+    TII.loadRegFromStackSlot(MBB, MBBI, FPReg, FI, RC, TRI);
+  }
+
+  if (FuncInfo->hasReturnAddressStackSlot()) {
+    unsigned RAReg = TRI->getRARegister();
+    int FI = FuncInfo->getReturnAddressFI();
+
+    // l.lwz r9, ra_ss(r1)
+    TII.loadRegFromStackSlot(MBB, MBBI, RAReg, FI, RC, TRI);
   }
 }
 
@@ -261,33 +217,138 @@ processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
                                      RegScavenger *RS) const {
   MachineFrameInfo *MFI = MF.getFrameInfo();
   MachineRegisterInfo& MRI = MF.getRegInfo();
-  const OR1KRegisterInfo *TRI =
-    static_cast<const OR1KRegisterInfo*>(MF.getTarget().getRegisterInfo());
+  const TargetMachine &TM = MF.getTarget();
+  auto TRI = static_cast<const OR1KRegisterInfo*>(TM.getRegisterInfo());
+  auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
+
   bool IsPIC = MF.getTarget().getRelocationModel() == Reloc::PIC_;
 
-  int Offset = -4;
+  int64_t StackOffset = 0;
+  StackOffset -= FuncInfo->getRegSaveAreaSize();
+  unsigned RegSize = OR1K::GPRRegClass.getSize();
 
-  if (MFI->adjustsStack() || IsPIC) {
-    MFI->CreateFixedObject(4, Offset, true);
-    // Mark unused since we will save it manually in the prologue
-    MRI.setPhysRegUnused(OR1K::R9);
-    Offset -= 4;
+  if (MFI->hasCalls() || !MRI.def_empty(TRI->getRARegister())) {
+    MRI.isPhysRegUsed(TRI->getRARegister());
+    StackOffset -= RegSize;
+    int RAFI = MFI->CreateFixedObject(RegSize, StackOffset, true);
+    FuncInfo->setReturnAddressFI(RAFI);
   }
 
   if (hasFP(MF)) {
-    MFI->CreateFixedObject(4, Offset, true);
-    Offset -= 4;
+    MRI.setPhysRegUsed(TRI->getFrameRegister(MF));
+    StackOffset -= RegSize;
+    int FPFI = MFI->CreateFixedObject(RegSize, StackOffset, true);
+    FuncInfo->setFramePointerFI(FPFI);
   }
 
-  if (TRI->hasBasePointer(MF)) {
-    MFI->CreateFixedObject(4, Offset, true);
-    MRI.setPhysRegUnused(TRI->getBaseRegister());
+  if (hasBP(MF)) {
+    MRI.setPhysRegUsed(TRI->getBaseRegister());
+    StackOffset -= RegSize;
+    int BPFI = MFI->CreateFixedObject(RegSize, StackOffset, true);
+    FuncInfo->setBasePointerFI(BPFI);
   }
+
+  if (IsPIC) {
+    unsigned GPReg = TRI->getGlobalBaseRegister();
+    if (MFI->hasCalls() || !MRI.def_empty(GPReg))
+      MRI.setPhysRegUsed(GPReg);
+  }
+}
+
+bool OR1KFrameLowering::
+requiresCustomSpillRestore(const MachineFunction &MF, unsigned Reg,
+                           const OR1KRegisterInfo *TRI) const {
+  return (hasFP(MF) && Reg == TRI->getFrameRegister(MF)) ||
+         (hasBP(MF) && Reg == TRI->getBaseRegister()) ||
+         Reg == TRI->getRARegister();
+}
+
+bool OR1KFrameLowering::
+spillCalleeSavedRegisters(MachineBasicBlock &MBB,
+                          MachineBasicBlock::iterator MI,
+                          const std::vector<CalleeSavedInfo> &CSI,
+                          const TargetRegisterInfo *TRI) const {
+  MachineFunction &MF = *MBB.getParent();
+  const TargetInstrInfo &TII = *MF.getTarget().getInstrInfo();
+  auto OR1KTRI = static_cast<const OR1KRegisterInfo *>(TRI);
+  for (std::vector<CalleeSavedInfo>::const_iterator I = CSI.begin(),
+       E = CSI.end(); I != E; ++I) {
+    unsigned Reg = I->getReg();
+    MBB.addLiveIn(Reg);
+
+    if (requiresCustomSpillRestore(MF, Reg, OR1KTRI))
+      continue;
+
+    const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
+    TII.storeRegToStackSlot(MBB, MI, Reg, true, I->getFrameIdx(), RC, TRI);
+  }
+  return true;
+}
+
+bool OR1KFrameLowering::
+restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator MI,
+                            const std::vector<CalleeSavedInfo> &CSI,
+                            const TargetRegisterInfo *TRI) const {
+  MachineFunction &MF = *MBB.getParent();
+  const TargetInstrInfo &TII = *MF.getTarget().getInstrInfo();
+  auto OR1KTRI = static_cast<const OR1KRegisterInfo *>(TRI);
+  for (std::vector<CalleeSavedInfo>::const_reverse_iterator I = CSI.rbegin(),
+       E = CSI.rend(); I != E; ++I) {
+    unsigned Reg = I->getReg();
+    if (!MBB.isLiveIn(Reg))
+      MBB.addLiveIn(Reg);
+
+    if (requiresCustomSpillRestore(MF, Reg, OR1KTRI))
+      continue;
+
+    const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
+    TII.loadRegFromStackSlot(MBB, MI, Reg, I->getFrameIdx(), RC, TRI);
+  }
+  return true;
 }
 
 void OR1KFrameLowering::
 eliminateCallFramePseudoInstr(MachineFunction &MF,
                               MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator MI) const {
-  MBB.remove(MI);
+  assert(MI->getOpcode() == OR1K::ADJCALLSTACKDOWN ||
+         MI->getOpcode() == OR1K::ADJCALLSTACKUP);
+
+  int64_t Addend = MI->getOperand(0).getImm();
+
+  if (!Addend || hasReservedCallFrame(MF)) {
+    MBB.erase(MI);
+    return;
+  }
+
+  const TargetMachine &TM = MF.getTarget();
+  const TargetInstrInfo &TII = *TM.getInstrInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  const unsigned SPReg = OR1K::R1;
+  DebugLoc dl = MI->getDebugLoc();
+
+
+  if (MI->getOpcode() == OR1K::ADJCALLSTACKDOWN)
+    Addend = -Addend;
+
+  if (isInt<16>(Addend)) {
+    // l.addi r1, r1, Addend
+    BuildMI(MBB, MI, dl, TII.get(OR1K::ADDI), SPReg)
+     .addReg(SPReg).addImm(Addend);
+  } else {
+    unsigned VReg = MRI.createVirtualRegister(&OR1K::GPRRegClass);
+
+    // l.movhi rT, hi(Addend)
+    // l.ori rT, rT, lo(Addend)
+    // l.add r1, r1, rT
+    BuildMI(MBB, MI, dl, TII.get(OR1K::MOVHI), VReg)
+     .addImm((Addend >> 16) & 0xFFFFU);
+    BuildMI(MBB, MI, dl, TII.get(OR1K::ORI), VReg)
+     .addReg(VReg).addImm(Addend & 0xFFFFU);
+    BuildMI(MBB, MI, dl, TII.get(OR1K::ADD), SPReg)
+     .addReg(SPReg).addReg(VReg, RegState::Kill);
+  }
+  MBB.erase(MI);
 }

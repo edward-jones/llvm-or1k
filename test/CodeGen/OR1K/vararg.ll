@@ -13,5 +13,5 @@ entry:
 ; CHECK: l.addi r3, r0, 1
 ; CHECK: l.sw 0(r1), r3
 ; check that fixed arg get passed in register r3
-; CHECK: l.movhi r3, 0
+; CHECK-NEXT: l.ori r3, r0, 0
 ; CHECK-NOT: l.sw

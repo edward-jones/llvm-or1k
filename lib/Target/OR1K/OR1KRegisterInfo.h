@@ -35,26 +35,24 @@ public:
 
   BitVector getReservedRegs(const MachineFunction &MF) const;
 
-  bool requiresRegisterScavenging(const MachineFunction &MF) const;
+  bool requiresRegisterScavenging(const MachineFunction &MF) const override;
+  bool requiresFrameIndexScavenging(const MachineFunction &MF) const override;
 
   void eliminateFrameIndex(MachineBasicBlock::iterator II,
                            int SPAdj, unsigned FIOperandNum,
                            RegScavenger *RS = NULL) const;
 
-  void processFunctionBeforeFrameFinalized(MachineFunction &MF) const;
-
-  bool hasBasePointer(const MachineFunction &MF) const;
   bool needsStackRealignment(const MachineFunction &MF) const;
 
-  // Debug information queries.
-  unsigned getRARegister() const;
-  unsigned getFrameRegister(const MachineFunction &MF) const;
-  unsigned getBaseRegister() const;
+  bool hasReservedSpillSlot(const MachineFunction &MF, unsigned Reg,
+                            int &FrameIndex) const override;
 
-  // Exception handling queries.
-  unsigned getEHExceptionRegister() const;
-  unsigned getEHHandlerRegister() const;
-  int getDwarfRegNum(unsigned RegNum, bool isEH) const;
+  bool hasReservedGlobalBaseRegister(const MachineFunction &MF) const;
+  unsigned getGlobalBaseRegister() const;
+
+  unsigned getFrameRegister(const MachineFunction &MF) const;
+
+  unsigned getBaseRegister() const;
 };
 
 } // end namespace llvm
