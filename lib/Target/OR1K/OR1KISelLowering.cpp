@@ -608,22 +608,23 @@ SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       break;
     }
 
-    if (VA.isRegLoc()) {
-      if (Flags.isByVal()) {
-        // On 'byval' arguments the caller must create a copy of the original
-        // argument and pass a reference to the copy.
-        unsigned Size = Flags.getByValSize();
-        unsigned Align = Flags.getByValAlign();
+    if (Flags.isByVal()) {
+      // On 'byval' arguments the caller must create a copy of the original
+      // argument and pass a reference to the copy.
+      unsigned Size = Flags.getByValSize();
+      unsigned Align = Flags.getByValAlign();
 
-        int FI = MFI->CreateStackObject(Size, Align, false);
-        SDValue Addr = DAG.getFrameIndex(FI, getPointerTy());
-        MemOpChains.push_back(DAG.getMemcpy(Chain, dl, Addr, ArgValue,
-                                            DAG.getConstant(Size, MVT::i32),
-                                            Align, false, false,
-                                            MachinePointerInfo(),
-                                            MachinePointerInfo()));
-        ArgValue = Addr;
-      }
+      int FI = MFI->CreateStackObject(Size, Align, false);
+      SDValue Addr = DAG.getFrameIndex(FI, getPointerTy());
+      MemOpChains.push_back(DAG.getMemcpy(Chain, dl, Addr, ArgValue,
+                                          DAG.getConstant(Size, MVT::i32),
+                                          Align, false, false,
+                                          MachinePointerInfo(),
+                                          MachinePointerInfo()));
+      ArgValue = Addr;
+    }
+
+    if (VA.isRegLoc()) {
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), ArgValue));
     } else {
       assert(VA.isMemLoc());
