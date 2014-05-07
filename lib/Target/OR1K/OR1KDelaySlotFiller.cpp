@@ -66,7 +66,8 @@ namespace {
 
     void insertDefsUses(MachineBasicBlock::instr_iterator MI,
                         SmallSet<unsigned, 32>& RegDefs,
-                        SmallSet<unsigned, 32>& RegUses);
+                        SmallSet<unsigned, 32>& RegUses,
+                        SmallSet<unsigned, 32>& RegDeadDefs);
 
     bool IsRegInSet(SmallSet<unsigned, 32>& RegSet,
                     unsigned Reg);
@@ -74,7 +75,8 @@ namespace {
     bool delayHasHazard(MachineBasicBlock::instr_iterator MI,
                         bool &sawLoad, bool &sawStore,
                         SmallSet<unsigned, 32> &RegDefs,
-                        SmallSet<unsigned, 32> &RegUses);
+                        SmallSet<unsigned, 32> &RegUses,
+                        SmallSet<unsigned, 32> &RegDeadDefs);
 
     bool
     findDelayInstr(MachineBasicBlock &MBB,
@@ -130,8 +132,9 @@ bool Filler::findDelayInstr(MachineBasicBlock &MBB,
 
   SmallSet<unsigned, 32> RegDefs;
   SmallSet<unsigned, 32> RegUses;
+  SmallSet<unsigned, 32> RegDeadDefs;
 
-  insertDefsUses(slot, RegDefs, RegUses);
+  insertDefsUses(slot, RegDefs, RegUses, RegDeadDefs);
 
   bool sawLoad = false;
   bool sawStore = false;
@@ -153,8 +156,8 @@ bool Filler::findDelayInstr(MachineBasicBlock &MBB,
         )
       break;
 
-    if (delayHasHazard(FI, sawLoad, sawStore, RegDefs, RegUses)) {
-      insertDefsUses(FI, RegDefs, RegUses);
+    if (delayHasHazard(FI, sawLoad, sawStore, RegDefs, RegUses, RegDeadDefs)) {
+      insertDefsUses(FI, RegDefs, RegUses, RegDeadDefs);
       continue;
     }
     Filler = FI;
@@ -166,7 +169,8 @@ bool Filler::findDelayInstr(MachineBasicBlock &MBB,
 bool Filler::delayHasHazard(MachineBasicBlock::instr_iterator MI,
                             bool &sawLoad, bool &sawStore,
                             SmallSet<unsigned, 32> &RegDefs,
-                            SmallSet<unsigned, 32> &RegUses) {
+                            SmallSet<unsigned, 32> &RegUses,
+                            SmallSet<unsigned, 32> &RegDeadDefs) {
   if (MI->isImplicitDef() || MI->isKill())
     return true;
 
@@ -203,7 +207,7 @@ bool Filler::delayHasHazard(MachineBasicBlock::instr_iterator MI,
     }
     if (MO.isUse()) {
       // check whether Reg is defined before delay slot.
-      if (IsRegInSet(RegDefs, Reg))
+      if (IsRegInSet(RegDefs, Reg) || IsRegInSet(RegDeadDefs, Reg))
         return true;
     }
   }
@@ -213,7 +217,8 @@ bool Filler::delayHasHazard(MachineBasicBlock::instr_iterator MI,
 // Insert Defs and Uses of MI into the sets RegDefs and RegUses.
 void Filler::insertDefsUses(MachineBasicBlock::instr_iterator MI,
                             SmallSet<unsigned, 32>& RegDefs,
-                            SmallSet<unsigned, 32>& RegUses) {
+                            SmallSet<unsigned, 32>& RegUses,
+                            SmallSet<unsigned, 32>& RegDeadDefs) {
   // If MI is a call or return, just examine the explicit non-variadic operands.
   MCInstrDesc MCID = MI->getDesc();
   unsigned e = MI->isCall() || MI->isReturn() ? MCID.getNumOperands() :
@@ -236,6 +241,8 @@ void Filler::insertDefsUses(MachineBasicBlock::instr_iterator MI,
 
     if (MO.isDef() && !MO.isDead())
       RegDefs.insert(Reg);
+    else if (MO.isDef() && MO.isDead())
+      RegDeadDefs.insert(Reg);
     else if (MO.isUse())
       RegUses.insert(Reg);
   }
