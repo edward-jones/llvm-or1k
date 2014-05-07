@@ -36,6 +36,8 @@ def OR1KInstrInfo : InstrInfo;
 //===----------------------------------------------------------------------===//
 def FeatureMul   : SubtargetFeature<"mul", "HasMul", "true",
                                    "Enable hardware multiplier">;
+def FeatureMul64 : SubtargetFeature<"mul64", "HasMul64", "true",
+                                   "Enable 64-bit hardware multiplier">;
 def FeatureDiv   : SubtargetFeature<"div", "HasDiv", "true",
                                    "Enable hardware divider">;
 def FeatureRor   : SubtargetFeature<"ror", "HasRor", "true",

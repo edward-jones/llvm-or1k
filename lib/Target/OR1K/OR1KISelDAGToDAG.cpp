@@ -211,11 +211,17 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
   switch(Opcode) {
   default: break;
   case ISD::FrameIndex: return SelectFrameIndex(Node);
-  case ISD::MULHU: return SelectMulHi(Node, false);
-  case ISD::MULHS: return SelectMulHi(Node, true);
-  case ISD::UMUL_LOHI: return SelectMulHiLo(Node, false);
-  case ISD::SMUL_LOHI: return SelectMulHiLo(Node, true);
   case OR1KISD::GLOBAL_BASE_REG: return getGlobalBaseReg().getNode();
+  }
+
+  if(Subtarget.hasMul64()) {
+    switch (Opcode) {
+    default: break;
+    case ISD::MULHU: return SelectMulHi(Node, false);
+    case ISD::MULHS: return SelectMulHi(Node, true);
+    case ISD::UMUL_LOHI: return SelectMulHiLo(Node, false);
+    case ISD::SMUL_LOHI: return SelectMulHiLo(Node, true);
+    }
   }
 
   // Select the default instruction

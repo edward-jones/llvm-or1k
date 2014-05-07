@@ -42,6 +42,7 @@ public:
   void ParseSubtargetFeatures(StringRef CPU, StringRef FS);
 
   bool hasMul()    const { return HasMul; }
+  bool hasMul64()  const { return HasMul64; }
   bool hasDiv()    const { return HasDiv; }
   bool hasRor()    const { return HasRor; }
   bool hasCmov()   const { return HasCmov; }
@@ -66,6 +67,7 @@ private:
   ABIKind OR1KABI;
   InstrItineraryData InstrItins;
   bool HasMul;
+  bool HasMul64;
   bool HasDiv;
   bool HasRor;
   bool HasCmov;

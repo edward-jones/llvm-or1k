@@ -94,6 +94,9 @@ OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm) :
 
   if (!Subtarget.hasMul()) {
     setOperationAction(ISD::MUL,             MVT::i32, Expand);
+  }
+
+  if (!Subtarget.hasMul64()) {
     setOperationAction(ISD::MULHU,           MVT::i32, Expand);
     setOperationAction(ISD::MULHS,           MVT::i32, Expand);
     setOperationAction(ISD::UMUL_LOHI,       MVT::i32, Expand);

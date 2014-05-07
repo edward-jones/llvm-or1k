@@ -166,6 +166,8 @@ def HasDiv       : Predicate<"Subtarget.hasDiv()">,
                    AssemblerPredicate<"FeatureDiv">;
 def HasMul       : Predicate<"Subtarget.hasMul()">,
                    AssemblerPredicate<"FeatureMul">;
+def HasMul64     : Predicate<"Subtarget.hasMul64()">,
+                   AssemblerPredicate<"FeatureMul64">;
 def HasRor       : Predicate<"Subtarget.hasRor()">,
                    AssemblerPredicate<"FeatureRor">;
 def HasCmov      : Predicate<"Subtarget.hasCmov()">,
@@ -359,9 +361,11 @@ class ALU_D<bits<2> op2Val, bits<4> op3Val, string asmstr,
 class ALU_MULD<bits<4> subOp, string asmstr, InstrItinClass itin>
   : ALU_D<0x3, subOp, asmstr, [], itin>;
 
-let isCommutable = 1, neverHasSideEffects = 1, Defs = [MACLO, MACHI] in {
-  def MULD  : ALU_MULD<0x7, "l.muld", II_MUL>;
-  def MULDU : ALU_MULD<0xc, "l.muldu", II_MUL>;
+let Predicates=[HasMul64] in {
+  let isCommutable = 1, neverHasSideEffects = 1, Defs = [MACLO, MACHI] in {
+    def MULD  : ALU_MULD<0x7, "l.muld", II_MUL>;
+    def MULDU : ALU_MULD<0xc, "l.muldu", II_MUL>;
+  }
 }
 
 class ALU2_RR<bits<2> subOp1, bits<4> subOp2, string asmstr, SDNode OpNode>
