@@ -30,6 +30,10 @@ public:
     DefaultABI, NewABI
   };
 
+  enum class DelayType {
+    Delay, NoDelay, CompatDelay
+  };
+
 public:
   /// This constructor initializes the data members to match that
   /// of the specified triple.
@@ -49,6 +53,7 @@ public:
   bool hasExt()    const { return HasExt; }
   bool hasSFII()   const { return HasSFII; }
   bool hasFBit()   const { return HasFBit; }
+  DelayType delaySlotType() const { return DelaySlotType; }
 
   bool isDefaultABI() const { return OR1KABI == DefaultABI; }
   bool isNewABI() const { return OR1KABI == NewABI; }
@@ -73,6 +78,7 @@ private:
   bool HasExt;
   bool HasSFII;
   bool HasFBit;
+  DelayType DelaySlotType;
 };
 } // End llvm namespace
 
