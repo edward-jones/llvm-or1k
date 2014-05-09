@@ -1,4 +1,4 @@
-//===- OR1KSubtarget.cpp - OR1K Subtarget Information -----------*- C++ -*-=//
+//===- OR1KSubtarget.cpp - OR1K Subtarget Information -------------*- C++ -*-=//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -27,7 +27,8 @@ OR1KSubtarget::OR1KSubtarget(const std::string &TT,
                              const std::string &CPU, const std::string &FS)
  : OR1KGenSubtargetInfo(TT, CPU, FS), OR1KABI(DefaultABI),
    HasMul(false), HasMul64(false), HasDiv(false), HasRor(false), HasCmov(false),
-   HasMAC(false), HasExt(false), HasSFII(false), HasFBit(false) {
+   HasMAC(false), HasExt(false), HasSFII(false), HasFBit(false),
+   DelaySlotType(DelayType::Delay) {
   std::string CPUName = CPU;
   if (CPUName.empty())
     CPUName = "generic";
@@ -45,6 +46,6 @@ OR1KSubtarget::enablePostRAScheduler(CodeGenOpt::Level OptLevel,
 
   CriticalPathRCs.clear();
   CriticalPathRCs.push_back(&OR1K::GPRRegClass);
-    
+
   return OptLevel >= CodeGenOpt::Default;
 }

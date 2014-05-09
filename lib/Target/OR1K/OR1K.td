@@ -53,6 +53,13 @@ def FeatureSFII  : SubtargetFeature<"sfii", "HasSFII", "true",
 def FeatureFBit  : SubtargetFeature<"fbit", "HasFBit", "true",
                                     "Enable find first/last bit set instructions">;
 
+def FeatureNoDelay : SubtargetFeature<"no-delay", "DelaySlotType",
+                                    "DelayType::NoDelay",
+                                    "Disable delay slots">;
+def FeatureCompatDelay : SubtargetFeature<"compat-delay", "DelaySlotType",
+                                    "DelayType::CompatDelay",
+                                    "Enable compat delay slot">;
+
 def NewABI       : SubtargetFeature<"abi-new", "OR1KABI", "NewABI",
                                     "Enable the NewABI">;
 

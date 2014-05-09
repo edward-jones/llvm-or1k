@@ -23,20 +23,9 @@
 #include "llvm/ADT/Statistic.h"
 
 using namespace llvm;
+typedef OR1KSubtarget::DelayType DelayType;
 
 STATISTIC(FilledSlots, "Number of delay slots filled");
-
-static cl::opt<bool> DisableDelaySlotFiller(
-  "disable-or1k-delay-filler",
-  cl::init(false),
-  cl::desc("Do not fill OR1K delay slots"),
-  cl::Hidden);
-
-static cl::opt<bool> CompatDelaySlotFiller(
-  "compat-or1k-delay-filler",
-  cl::init(false),
-  cl::desc("Fill OR1K delay slots with l.nops."),
-  cl::Hidden);
 
 namespace {
   class Filler : public MachineFunctionPass {
@@ -97,9 +86,10 @@ FunctionPass *llvm::createOR1KDelaySlotFillerPass(OR1KTargetMachine &tm) {
 bool Filler::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
   bool Changed = false;
   LastFiller = MBB.instr_end();
+  DelayType Delay = TM.getSubtarget<OR1KSubtarget>().delaySlotType();
 
   // No delay slots
-  if (DisableDelaySlotFiller)
+  if (Delay == DelayType::NoDelay)
     return false;
 
   for (MachineBasicBlock::instr_iterator I = MBB.instr_begin();
@@ -108,7 +98,8 @@ bool Filler::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
       MachineBasicBlock::instr_iterator J = I;
 
       if (TM.getOptLevel() != CodeGenOpt::None &&
-              !CompatDelaySlotFiller && findDelayInstr(MBB, I, J))
+	  !(Delay == DelayType::CompatDelay) &&
+	  findDelayInstr(MBB, I, J))
         MBB.splice(std::next(I), &MBB, J);
       else
         BuildMI(MBB, std::next(I), DebugLoc(), TII->get(OR1K::NOP)).addImm(0);

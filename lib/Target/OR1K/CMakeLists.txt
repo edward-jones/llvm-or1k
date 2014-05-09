@@ -17,7 +17,6 @@ add_llvm_target(OR1KCodeGen
   OR1KISelLowering.cpp
   OR1KInstrInfo.cpp
   OR1KFrameLowering.cpp
-  OR1KMachineFunctionInfo.cpp
   OR1KRegisterInfo.cpp
   OR1KSubtarget.cpp
   OR1KTargetMachine.cpp
