@@ -86,7 +86,7 @@ def DADDu  : ArithLogicR<"daddu", GPR64Opnd, 1, II_DADDU, add>,
                               ADD_FM<0, 0x2d>;
 def DSUBu  : ArithLogicR<"dsubu", GPR64Opnd, 0, II_DSUBU, sub>,
                               ADD_FM<0, 0x2f>;
-def DSUB   : ArithLogicR<"dsub", GPR64Opnd, 0, II_DSUB, sub>, ADD_FM<0, 0x2e>;
+def DSUB   : ArithLogicR<"dsub", GPR64Opnd, 0, II_DSUB>, ADD_FM<0, 0x2e>;
 
 let isCodeGenOnly = 1 in {
 def SLT64  : SetCC_R<"slt", setlt, GPR64Opnd>, ADD_FM<0, 0x2a>;
@@ -118,14 +118,13 @@ def DSRA32 : shift_rotate_imm<"dsra32", uimm5, GPR64Opnd, II_DSRA32>,
              SRA_FM<0x3f, 0>;
 
 // Rotate Instructions
-let Predicates = [HasMips64r2, HasStdEnc] in {
-  def DROTR  : shift_rotate_imm<"drotr", uimm6, GPR64Opnd, II_DROTR, rotr,
-                                immZExt6>, SRA_FM<0x3a, 1>;
-  def DROTRV : shift_rotate_reg<"drotrv", GPR64Opnd, II_DROTRV, rotr>,
-               SRLV_FM<0x16, 1>;
-  def DROTR32 : shift_rotate_imm<"drotr32", uimm5, GPR64Opnd, II_DROTR32>,
-                SRA_FM<0x3e, 1>;
-}
+def DROTR  : shift_rotate_imm<"drotr", uimm6, GPR64Opnd, II_DROTR, rotr,
+                              immZExt6>,
+             SRA_FM<0x3a, 1>, ISA_MIPS64R2;
+def DROTRV : shift_rotate_reg<"drotrv", GPR64Opnd, II_DROTRV, rotr>,
+             SRLV_FM<0x16, 1>, ISA_MIPS64R2;
+def DROTR32 : shift_rotate_imm<"drotr32", uimm5, GPR64Opnd, II_DROTR32>,
+              SRA_FM<0x3e, 1>, ISA_MIPS64R2;
 
 /// Load and Store Instructions
 ///  aligned
@@ -237,8 +236,23 @@ let isCodeGenOnly = 1, rs = 0, shamt = 0 in {
                     "sll\t$rd, $rt, 0", [], II_SLL>;
 }
 
+// We need the following two pseudo instructions to avoid offset calculation for
+// long branches.  See the comment in file MipsLongBranch.cpp for detailed
+// explanation.
+
+// Expands to: lui $dst, %highest($tgt - $baltgt)
+def LONG_BRANCH_LUi64 : PseudoSE<(outs GPR64Opnd:$dst),
+  (ins brtarget:$tgt, brtarget:$baltgt), []>;
+
+// Expands to: daddiu $dst, $src, %PART($tgt - $baltgt)
+// where %PART may be %higher, %hi or %lo, depending on the relocation kind
+// that $tgt is annotated with.
+def LONG_BRANCH_DADDiu : PseudoSE<(outs GPR64Opnd:$dst),
+  (ins GPR64Opnd:$src, brtarget:$tgt, brtarget:$baltgt), []>;
+
 // Cavium Octeon cmMIPS instructions
-let Predicates = [HasCnMips] in {
+let EncodingPredicates = []<Predicate>, // FIXME: The lack of HasStdEnc is probably a bug
+    AdditionalPredicates = [HasCnMips] in {
 
 class Count1s<string opstr, RegisterOperand RO>:
   InstSE<(outs RO:$rd), (ins RO:$rs), !strconcat(opstr, "\t$rd, $rs"),
@@ -307,7 +321,7 @@ def SEQi  : SetCC64_I<"seqi", seteq>, SEQI_FM<0x2e>;
 def SNE   : SetCC64_R<"sne", setne>, SEQ_FM<0x2b>;
 def SNEi  : SetCC64_I<"snei", setne>, SEQI_FM<0x2f>;
 
-// 192-bit × 64-bit Unsigned Multiply and Add
+// 192-bit x 64-bit Unsigned Multiply and Add
 let Defs = [P0, P1, P2] in
 def V3MULU: ArithLogicR<"v3mulu", GPR64Opnd, 0, II_DMUL>,
                                   ADD_FM<0x1c, 0x11>;
@@ -331,12 +345,10 @@ def VMULU : ArithLogicR<"vmulu", GPR64Opnd, 0, II_DMUL>,
 //===----------------------------------------------------------------------===//
 
 // extended loads
-let Predicates = [HasStdEnc] in {
-  def : MipsPat<(i64 (extloadi1  addr:$src)), (LB64 addr:$src)>;
-  def : MipsPat<(i64 (extloadi8  addr:$src)), (LB64 addr:$src)>;
-  def : MipsPat<(i64 (extloadi16 addr:$src)), (LH64 addr:$src)>;
-  def : MipsPat<(i64 (extloadi32 addr:$src)), (LW64 addr:$src)>;
-}
+def : MipsPat<(i64 (extloadi1  addr:$src)), (LB64 addr:$src)>;
+def : MipsPat<(i64 (extloadi8  addr:$src)), (LB64 addr:$src)>;
+def : MipsPat<(i64 (extloadi16 addr:$src)), (LH64 addr:$src)>;
+def : MipsPat<(i64 (extloadi32 addr:$src)), (LW64 addr:$src)>;
 
 // hi/lo relocs
 def : MipsPat<(MipsHi tglobaladdr:$in), (LUi64 tglobaladdr:$in)>;
@@ -389,8 +401,7 @@ defm : SetgeImmPats<GPR64, SLTi64, SLTiu64>;
 
 // truncate
 def : MipsPat<(i32 (trunc GPR64:$src)),
-              (SLL (EXTRACT_SUBREG GPR64:$src, sub_32), 0)>,
-      Requires<[HasStdEnc]>;
+              (SLL (EXTRACT_SUBREG GPR64:$src, sub_32), 0)>;
 
 // 32-to-64-bit extension
 def : MipsPat<(i64 (anyext GPR32:$src)), (SLL64_32 GPR32:$src)>;
@@ -407,52 +418,42 @@ def : MipsPat<(bswap GPR64:$rt), (DSHD (DSBH GPR64:$rt))>;
 //===----------------------------------------------------------------------===//
 // Instruction aliases
 //===----------------------------------------------------------------------===//
-def : InstAlias<"move $dst, $src",
-                (DADDu GPR64Opnd:$dst,  GPR64Opnd:$src, ZERO_64), 1>,
-      Requires<[HasMips64]>;
-def : InstAlias<"daddu $rs, $rt, $imm",
-                (DADDiu GPR64Opnd:$rs, GPR64Opnd:$rt, simm16_64:$imm),
-                0>;
-def : InstAlias<"dadd $rs, $rt, $imm",
-                (DADDi GPR64Opnd:$rs, GPR64Opnd:$rt, simm16_64:$imm),
-                0>;
-def : InstAlias<"daddu $rs, $imm",
-                (DADDiu GPR64Opnd:$rs, GPR64Opnd:$rs, simm16_64:$imm),
-                0>;
-def : InstAlias<"dadd $rs, $imm",
-                (DADDi GPR64Opnd:$rs, GPR64Opnd:$rs, simm16_64:$imm),
-                0>;
-def : InstAlias<"add $rs, $imm",
-                (ADDi GPR32Opnd:$rs, GPR32Opnd:$rs, simm16:$imm),
-                0>;
-def : InstAlias<"addu $rs, $imm",
-                (ADDiu GPR32Opnd:$rs, GPR32Opnd:$rs, simm16:$imm),
-                0>;
-let isPseudo=1, usesCustomInserter=1, isCodeGenOnly=1 in {
-def SUBi : MipsInst<(outs GPR32Opnd: $rt), (ins GPR32Opnd: $rs, simm16: $imm),
-                    "sub\t$rt, $rs, $imm", [], II_DSUB, Pseudo>;
-def SUBiu : MipsInst<(outs GPR32Opnd: $rt), (ins GPR32Opnd: $rs, simm16: $imm),
-                    "subu\t$rt, $rs, $imm", [], II_DSUB, Pseudo>;
-def DSUBi : MipsInst<(outs GPR64Opnd: $rt), (ins GPR64Opnd: $rs, simm16_64: $imm),
-                    "ssub\t$rt, $rs, $imm", [], II_DSUB, Pseudo>;
-def DSUBiu : MipsInst<(outs GPR64Opnd: $rt), (ins GPR64Opnd: $rs, simm16_64: $imm),
-                    "ssubu\t$rt, $rs, $imm", [], II_DSUB, Pseudo>;
-}
-def : InstAlias<"dsubu $rt, $rs, $imm",
-                (DSUBiu GPR64Opnd:$rt, GPR64Opnd:$rs, simm16_64: $imm),
-                0>;
-def : InstAlias<"sub $rs, $imm",
-                (SUBi GPR32Opnd:$rs, GPR32Opnd:$rs, simm16:$imm),
-                0>;
-def : InstAlias<"subu $rs, $imm",
-                (SUBiu GPR32Opnd:$rs, GPR32Opnd:$rs, simm16:$imm),
-                0>;
-def : InstAlias<"dsub $rs, $imm",
-                (DSUBi GPR64Opnd:$rs, GPR64Opnd:$rs, simm16_64:$imm),
-                0>;
-def : InstAlias<"dsubu $rs, $imm",
-                (DSUBiu GPR64Opnd:$rs, GPR64Opnd:$rs, simm16_64:$imm),
-                0>;
+def : MipsInstAlias<"move $dst, $src",
+                    (DADDu GPR64Opnd:$dst,  GPR64Opnd:$src, ZERO_64), 1>,
+      Requires<[IsGP64]>;
+def : MipsInstAlias<"daddu $rs, $rt, $imm",
+                    (DADDiu GPR64Opnd:$rs, GPR64Opnd:$rt, simm16_64:$imm),
+                    0>;
+def : MipsInstAlias<"dadd $rs, $rt, $imm",
+                    (DADDi GPR64Opnd:$rs, GPR64Opnd:$rt, simm16_64:$imm),
+                    0>;
+def : MipsInstAlias<"daddu $rs, $imm",
+                    (DADDiu GPR64Opnd:$rs, GPR64Opnd:$rs, simm16_64:$imm),
+                    0>;
+def : MipsInstAlias<"dadd $rs, $imm",
+                    (DADDi GPR64Opnd:$rs, GPR64Opnd:$rs, simm16_64:$imm),
+                    0>;
+def : MipsInstAlias<"add $rs, $imm",
+                    (ADDi GPR32Opnd:$rs, GPR32Opnd:$rs, simm16:$imm),
+                    0>;
+def : MipsInstAlias<"addu $rs, $imm",
+                    (ADDiu GPR32Opnd:$rs, GPR32Opnd:$rs, simm16:$imm),
+                    0>;
+def : MipsInstAlias<"dsll $rd, $rt, $rs",
+                    (DSLLV GPR64Opnd:$rd, GPR64Opnd:$rt, GPR32Opnd:$rs), 0>;
+def : MipsInstAlias<"dsubu $rt, $rs, $imm",
+                    (DADDiu GPR64Opnd:$rt, GPR64Opnd:$rs,
+                            InvertedImOperand64:$imm), 0>;
+def : MipsInstAlias<"dsub $rs, $imm",
+                    (DADDi GPR64Opnd:$rs, GPR64Opnd:$rs,
+                           InvertedImOperand64:$imm),
+                    0>;
+def : MipsInstAlias<"dsubu $rs, $imm",
+                    (DADDiu GPR64Opnd:$rs, GPR64Opnd:$rs,
+                            InvertedImOperand64:$imm),
+                    0>;
+def : MipsInstAlias<"dsrl $rd, $rt, $rs",
+                    (DSRLV GPR64Opnd:$rd, GPR64Opnd:$rt, GPR32Opnd:$rs), 0>;
 
 /// Move between CPU and coprocessor registers
 let DecoderNamespace = "Mips64", Predicates = [HasMips64] in {
@@ -463,8 +464,8 @@ def DMTC2 : MFC3OP<"dmtc2", GPR64Opnd>, MFC3OP_FM<0x12, 5>;
 }
 
 // Two operand (implicit 0 selector) versions:
-def : InstAlias<"dmfc0 $rt, $rd", (DMFC0 GPR64Opnd:$rt, GPR64Opnd:$rd, 0), 0>;
-def : InstAlias<"dmtc0 $rt, $rd", (DMTC0 GPR64Opnd:$rt, GPR64Opnd:$rd, 0), 0>;
-def : InstAlias<"dmfc2 $rt, $rd", (DMFC2 GPR64Opnd:$rt, GPR64Opnd:$rd, 0), 0>;
-def : InstAlias<"dmtc2 $rt, $rd", (DMTC2 GPR64Opnd:$rt, GPR64Opnd:$rd, 0), 0>;
+def : MipsInstAlias<"dmfc0 $rt, $rd", (DMFC0 GPR64Opnd:$rt, GPR64Opnd:$rd, 0), 0>;
+def : MipsInstAlias<"dmtc0 $rt, $rd", (DMTC0 GPR64Opnd:$rt, GPR64Opnd:$rd, 0), 0>;
+def : MipsInstAlias<"dmfc2 $rt, $rd", (DMFC2 GPR64Opnd:$rt, GPR64Opnd:$rd, 0), 0>;
+def : MipsInstAlias<"dmtc2 $rt, $rd", (DMTC2 GPR64Opnd:$rt, GPR64Opnd:$rd, 0), 0>;
 

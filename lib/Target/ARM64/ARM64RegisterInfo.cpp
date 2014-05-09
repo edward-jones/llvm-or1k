@@ -27,10 +27,10 @@
 #include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetOptions.h"
 
+using namespace llvm;
+
 #define GET_REGINFO_TARGET_DESC
 #include "ARM64GenRegisterInfo.inc"
-
-using namespace llvm;
 
 ARM64RegisterInfo::ARM64RegisterInfo(const ARM64InstrInfo *tii,
                                      const ARM64Subtarget *sti)
@@ -76,7 +76,7 @@ ARM64RegisterInfo::getThisReturnPreservedMask(CallingConv::ID) const {
 BitVector ARM64RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
 
-  // FIXME: avoid re-calculating this everytime.
+  // FIXME: avoid re-calculating this every time.
   BitVector Reserved(getNumRegs());
   Reserved.set(ARM64::SP);
   Reserved.set(ARM64::XZR);
@@ -136,7 +136,7 @@ ARM64RegisterInfo::getPointerRegClass(const MachineFunction &MF,
 const TargetRegisterClass *
 ARM64RegisterInfo::getCrossCopyRegClass(const TargetRegisterClass *RC) const {
   if (RC == &ARM64::CCRRegClass)
-    return NULL; // Can't copy CPSR.
+    return nullptr; // Can't copy NZCV.
   return RC;
 }
 

@@ -15,6 +15,8 @@
 #include "OR1KRegisterInfo.h"
 #include "OR1KSubtarget.h"
 
+#define DEBUG_TYPE "or1k-subtarget"
+
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "OR1KGenSubtargetInfo.inc"

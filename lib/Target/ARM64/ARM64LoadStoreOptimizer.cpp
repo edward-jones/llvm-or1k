@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "arm64-ldst-opt"
 #include "ARM64InstrInfo.h"
 #include "MCTargetDesc/ARM64AddressingModes.h"
 #include "llvm/ADT/BitVector.h"
@@ -30,6 +29,8 @@
 #include "llvm/ADT/Statistic.h"
 using namespace llvm;
 
+#define DEBUG_TYPE "arm64-ldst-opt"
+
 /// ARM64AllocLoadStoreOpt - Post-register allocation pass to combine
 /// load / store instructions to form ldp / stp instructions.
 
@@ -39,8 +40,6 @@ STATISTIC(NumPreFolded, "Number of pre-index updates folded");
 STATISTIC(NumUnscaledPairCreated,
           "Number of load/store from unscaled generated");
 
-static cl::opt<bool> DoLoadStoreOpt("arm64-load-store-opt", cl::init(true),
-                                    cl::Hidden);
 static cl::opt<unsigned> ScanLimit("arm64-load-store-scan-limit", cl::init(20),
                                    cl::Hidden);
 
@@ -100,9 +99,9 @@ struct ARM64LoadStoreOpt : public MachineFunctionPass {
 
   bool optimizeBlock(MachineBasicBlock &MBB);
 
-  virtual bool runOnMachineFunction(MachineFunction &Fn);
+  bool runOnMachineFunction(MachineFunction &Fn) override;
 
-  virtual const char *getPassName() const {
+  const char *getPassName() const override {
     return "ARM64 load / store optimization pass";
   }
 
@@ -922,10 +921,6 @@ bool ARM64LoadStoreOpt::optimizeBlock(MachineBasicBlock &MBB) {
 }
 
 bool ARM64LoadStoreOpt::runOnMachineFunction(MachineFunction &Fn) {
-  // Early exit if pass disabled.
-  if (!DoLoadStoreOpt)
-    return false;
-
   const TargetMachine &TM = Fn.getTarget();
   TII = static_cast<const ARM64InstrInfo *>(TM.getInstrInfo());
   TRI = TM.getRegisterInfo();

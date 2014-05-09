@@ -38,6 +38,8 @@
 using namespace llvm;
 using namespace cl;
 
+#define DEBUG_TYPE "commandline"
+
 //===----------------------------------------------------------------------===//
 // Template instantiations and anchors.
 //
@@ -103,7 +105,7 @@ void cl::MarkOptionsChanged() {
 static Option *RegisteredOptionList = nullptr;
 
 void Option::addArgument() {
-  assert(NextRegistered == 0 && "argument multiply registered!");
+  assert(!NextRegistered && "argument multiply registered!");
 
   NextRegistered = RegisteredOptionList;
   RegisteredOptionList = this;
@@ -111,7 +113,7 @@ void Option::addArgument() {
 }
 
 void Option::removeArgument() {
-  assert(NextRegistered != 0 && "argument never registered");
+  assert(NextRegistered && "argument never registered");
   assert(RegisteredOptionList == this && "argument is not the last registered");
   RegisteredOptionList = NextRegistered;
   MarkOptionsChanged();
@@ -300,7 +302,7 @@ static inline bool ProvideOption(Option *Handler, StringRef ArgName,
   // Enforce value requirements
   switch (Handler->getValueExpectedFlag()) {
   case ValueRequired:
-    if (Value.data() == nullptr) { // No value specified?
+    if (!Value.data()) { // No value specified?
       if (i+1 >= argc)
         return Handler->error("requires a value!");
       // Steal the next argument, like for '-o filename'
@@ -400,7 +402,7 @@ static Option *HandlePrefixedOrGroupedOption(StringRef &Arg, StringRef &Value,
   // Do the lookup!
   size_t Length = 0;
   Option *PGOpt = getOptionPred(Arg, Length, isPrefixedOrGrouping, OptionsMap);
-  if (PGOpt == nullptr) return nullptr;
+  if (!PGOpt) return nullptr;
 
   // If the option is a prefixed option, then the value is simply the
   // rest of the name...  so fall through to later processing, by
@@ -746,7 +748,7 @@ void cl::ParseCommandLineOptions(int argc, const char * const *argv,
   argc = static_cast<int>(newArgv.size());
 
   // Copy the program name into ProgName, making sure not to overflow it.
-  std::string ProgName = sys::path::filename(argv[0]);
+  StringRef ProgName = sys::path::filename(argv[0]);
   size_t Len = std::min(ProgName.size(), size_t(79));
   memcpy(ProgramName, ProgName.data(), Len);
   ProgramName[Len] = '\0';
@@ -770,7 +772,7 @@ void cl::ParseCommandLineOptions(int argc, const char * const *argv,
 
     // Calculate how many positional values are _required_.
     bool UnboundedFound = false;
-    for (size_t i = ConsumeAfterOpt != nullptr, e = PositionalOpts.size();
+    for (size_t i = ConsumeAfterOpt ? 1 : 0, e = PositionalOpts.size();
          i != e; ++i) {
       Option *Opt = PositionalOpts[i];
       if (RequiresValue(Opt))
@@ -845,8 +847,7 @@ void cl::ParseCommandLineOptions(int argc, const char * const *argv,
         // All of the positional arguments have been fulfulled, give the rest to
         // the consume after option... if it's specified...
         //
-        if (PositionalVals.size() >= NumPositionalRequired &&
-            ConsumeAfterOpt != nullptr) {
+        if (PositionalVals.size() >= NumPositionalRequired && ConsumeAfterOpt) {
           for (++i; i < argc; ++i)
             PositionalVals.push_back(std::make_pair(argv[i],i));
           break;   // Handle outside of the argument processing loop...
@@ -884,18 +885,18 @@ void cl::ParseCommandLineOptions(int argc, const char * const *argv,
       Handler = LookupOption(ArgName, Value, Opts);
 
       // Check to see if this "option" is really a prefixed or grouped argument.
-      if (Handler == nullptr)
+      if (!Handler)
         Handler = HandlePrefixedOrGroupedOption(ArgName, Value,
                                                 ErrorParsing, Opts);
 
       // Otherwise, look for the closest available option to report to the user
       // in the upcoming error.
-      if (Handler == nullptr && SinkOpts.empty())
+      if (!Handler && SinkOpts.empty())
         NearestHandler = LookupNearestOption(ArgName, Opts,
                                              NearestHandlerString);
     }
 
-    if (Handler == nullptr) {
+    if (!Handler) {
       if (SinkOpts.empty()) {
         errs() << ProgramName << ": Unknown command line argument '"
              << argv[i] << "'.  Try: '" << argv[0] << " -help'\n";
@@ -939,7 +940,7 @@ void cl::ParseCommandLineOptions(int argc, const char * const *argv,
          << " positional arguments: See: " << argv[0] << " -help\n";
     ErrorParsing = true;
 
-  } else if (ConsumeAfterOpt == nullptr) {
+  } else if (!ConsumeAfterOpt) {
     // Positional args have already been handled if ConsumeAfter is specified.
     unsigned ValNo = 0, NumVals = static_cast<unsigned>(PositionalVals.size());
     for (size_t i = 0, e = PositionalOpts.size(); i != e; ++i) {
@@ -1044,7 +1045,7 @@ void cl::ParseCommandLineOptions(int argc, const char * const *argv,
 //
 
 bool Option::error(const Twine &Message, StringRef ArgName) {
-  if (ArgName.data() == nullptr) ArgName = ArgStr;
+  if (!ArgName.data()) ArgName = ArgStr;
   if (ArgName.empty())
     errs() << HelpStr;  // Be nice for positional arguments
   else
@@ -1779,7 +1780,7 @@ void cl::SetVersionPrinter(void (*func)()) {
 }
 
 void cl::AddExtraVersionPrinter(void (*func)()) {
-  if (ExtraVersionPrinters == nullptr)
+  if (!ExtraVersionPrinters)
     ExtraVersionPrinters = new std::vector<void (*)()>;
 
   ExtraVersionPrinters->push_back(func);

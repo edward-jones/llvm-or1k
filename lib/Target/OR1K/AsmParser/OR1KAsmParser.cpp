@@ -31,7 +31,8 @@ public:
   typedef SmallVectorImpl<MCParsedAsmOperand*> ParsedOperandsVector;
 
 public:
-  OR1KAsmParser(MCSubtargetInfo &STI, MCAsmParser &P, const MCInstrInfo &MII)
+  OR1KAsmParser(MCSubtargetInfo &STI, MCAsmParser &P,
+                const MCInstrInfo &MII, const MCTargetOptions &Options)
    : STI(STI) {
     setAvailableFeatures(ComputeAvailableFeatures(STI.getFeatureBits()));
   }

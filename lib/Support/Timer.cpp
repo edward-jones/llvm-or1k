@@ -15,6 +15,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Mutex.h"
@@ -100,7 +101,7 @@ static TimerGroup *getDefaultTimerGroup() {
 //===----------------------------------------------------------------------===//
 
 void Timer::init(StringRef N) {
-  assert(TG == 0 && "Timer already initialized");
+  assert(!TG && "Timer already initialized");
   Name.assign(N.begin(), N.end());
   Started = false;
   TG = getDefaultTimerGroup();
@@ -108,7 +109,7 @@ void Timer::init(StringRef N) {
 }
 
 void Timer::init(StringRef N, TimerGroup &tg) {
-  assert(TG == 0 && "Timer already initialized");
+  assert(!TG && "Timer already initialized");
   Name.assign(N.begin(), N.end());
   Started = false;
   TG = &tg;
@@ -264,7 +265,7 @@ TimerGroup::TimerGroup(StringRef name)
 TimerGroup::~TimerGroup() {
   // If the timer group is destroyed before the timers it owns, accumulate and
   // print the timing data.
-  while (FirstTimer != nullptr)
+  while (FirstTimer)
     removeTimer(*FirstTimer);
   
   // Remove the group from the TimerGroupList.
@@ -291,7 +292,7 @@ void TimerGroup::removeTimer(Timer &T) {
   
   // Print the report when all timers in this group are destroyed if some of
   // them were started.
-  if (FirstTimer != nullptr || TimersToPrint.empty())
+  if (FirstTimer || TimersToPrint.empty())
     return;
   
   raw_ostream *OutStream = CreateInfoOutputFile();

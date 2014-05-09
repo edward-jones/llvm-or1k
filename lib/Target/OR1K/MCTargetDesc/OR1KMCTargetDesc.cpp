@@ -1,4 +1,4 @@
-//===-- OR1KMCTargetDesc.cpp - OR1K Target Descriptions -----------------===//
+//===-- OR1KMCTargetDesc.cpp - OR1K Target Descriptions -------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -65,20 +65,16 @@ createOR1KMCStreamer(const Target &T, StringRef TT, MCContext &Ctx,
                      MCAsmBackend &MAB, raw_ostream &OS, MCCodeEmitter *Emitter,
                      const MCSubtargetInfo &STI, bool RelaxAll,
                      bool NoExecStack) {
-  MCStreamer *S = createELFStreamer(Ctx, MAB, OS, Emitter, RelaxAll,
-                                    NoExecStack);
-  return S;
+  return createELFStreamer(Ctx, MAB, OS, Emitter, RelaxAll, NoExecStack);
 }
 
 static MCStreamer *
 createOR1KMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
-                        bool isVerboseAsm, bool useCFI, bool useDwarfDirectory,
+                        bool isVerboseAsm, bool useDwarfDirectory,
                         MCInstPrinter *InstPrint, MCCodeEmitter *CE,
                         MCAsmBackend *TAB, bool ShowInst) {
-  MCStreamer *S = llvm::createAsmStreamer(Ctx, OS, isVerboseAsm, useCFI,
-                                          useDwarfDirectory, InstPrint, CE,
-                                          TAB, ShowInst);
-  return S;
+  return llvm::createAsmStreamer(Ctx, OS, isVerboseAsm, useDwarfDirectory,
+                                 InstPrint, CE, TAB, ShowInst);
 }
 
 
@@ -88,9 +84,7 @@ static MCInstPrinter *createOR1KMCInstPrinter(const Target &T,
                                               const MCInstrInfo &MII,
                                               const MCRegisterInfo &MRI,
                                               const MCSubtargetInfo &STI) {
-  if (SyntaxVariant == 0)
-    return new OR1KInstPrinter(MAI, MII, MRI);
-  return 0;
+  return (SyntaxVariant == 0) ? new OR1KInstPrinter(MAI, MII, MRI) : nullptr;
 }
 
 extern "C" void LLVMInitializeOR1KTargetMC() {
@@ -115,8 +109,7 @@ extern "C" void LLVMInitializeOR1KTargetMC() {
                                         llvm::createOR1KMCCodeEmitter);
 
   // Register the ASM Backend.
-  TargetRegistry::RegisterMCAsmBackend(TheOR1KTarget,
-                                       createOR1KAsmBackend);
+  TargetRegistry::RegisterMCAsmBackend(TheOR1KTarget, createOR1KAsmBackend);
 
   // Register the asm streamer.
   TargetRegistry::RegisterAsmStreamer(TheOR1KTarget, createOR1KMCAsmStreamer);

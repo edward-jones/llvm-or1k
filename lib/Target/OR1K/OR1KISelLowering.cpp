@@ -557,8 +557,7 @@ LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
   if (Flag.getNode())
     RetOps.push_back(Flag);
 
-  return DAG.getNode(OR1KISD::RET_FLAG, dl, MVT::Other,
-                     RetOps.data(), RetOps.size());
+  return DAG.getNode(OR1KISD::RET_FLAG, dl, MVT::Other, makeArrayRef(RetOps));
 }
 
 SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
@@ -643,7 +642,7 @@ SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   if (!MemOpChains.empty())
     Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other,
-                        MemOpChains.data(), MemOpChains.size());
+                        makeArrayRef(MemOpChains));
 
   // Build a sequence of copy-to-reg nodes chained together with token chain and
   // flag operands which copy the outgoing args into registers. The InFlag is
@@ -688,7 +687,7 @@ SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     Ops.push_back(InFlag);
 
   SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
-  Chain = DAG.getNode(OR1KISD::CALL, dl, NodeTys, Ops.data(), Ops.size());
+  Chain = DAG.getNode(OR1KISD::CALL, dl, NodeTys, makeArrayRef(Ops));
   InFlag = Chain.getValue(1);
 
   Chain = DAG.getCALLSEQ_END(Chain, SPAdjAmount,
@@ -839,7 +838,7 @@ SDValue OR1KTargetLowering::LowerSELECT_CC(SDValue Op,
   Ops.push_back(TargetCC);
   Ops.push_back(Flag);
 
-  return DAG.getNode(OR1KISD::SELECT_CC, dl, VTs, &Ops[0], Ops.size());
+  return DAG.getNode(OR1KISD::SELECT_CC, dl, VTs, makeArrayRef(Ops));
 }
 
 static SDValue LowerVASTART_NewABI(SDValue Op, SelectionDAG &DAG) {

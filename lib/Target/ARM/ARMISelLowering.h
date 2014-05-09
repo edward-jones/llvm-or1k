@@ -384,6 +384,13 @@ namespace llvm {
     bool shouldConvertConstantLoadToIntImm(const APInt &Imm,
                                            Type *Ty) const override;
 
+    Value *emitLoadLinked(IRBuilder<> &Builder, Value *Addr,
+                          AtomicOrdering Ord) const override;
+    Value *emitStoreConditional(IRBuilder<> &Builder, Value *Val,
+                                Value *Addr, AtomicOrdering Ord) const override;
+
+    bool shouldExpandAtomicInIR(Instruction *Inst) const override;
+
   protected:
     std::pair<const TargetRegisterClass*, uint8_t>
     findRepresentativeClass(MVT VT) const override;
@@ -430,6 +437,7 @@ namespace llvm {
     SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerGlobalAddressDarwin(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerGlobalAddressELF(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerGlobalAddressWindows(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerToTLSGeneralDynamicModel(GlobalAddressSDNode *GA,
                                             SelectionDAG &DAG) const;
@@ -453,6 +461,8 @@ namespace llvm {
                               const ARMSubtarget *ST) const;
     SDValue LowerFSINCOS(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerDivRem(SDValue Op, SelectionDAG &DAG) const;
+
+    unsigned getRegisterByName(const char* RegName) const;
 
     /// isFMAFasterThanFMulAndFAdd - Return true if an FMA operation is faster
     /// than a pair of fmul and fadd instructions. fmuladd intrinsics will be
