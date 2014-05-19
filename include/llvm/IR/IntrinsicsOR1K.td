@@ -36,4 +36,14 @@ def int_or1k_trap : GCCBuiltin<"__builtin_or1k_trap">,
 def int_or1k_rfe : GCCBuiltin<"__builtin_or1k_rfe">,
   Intrinsic<[], [], []>;
 
+//===----------------------------------------------------------------------===//
+// OR1K Move from/to special register intrinsics.
+//===----------------------------------------------------------------------===//
+
+def int_or1k_mfspr : GCCBuiltin<"__builtin_or1k_mfspr">,
+  Intrinsic<[llvm_i32_ty], [llvm_i32_ty], []>;
+
+def int_or1k_mtspr : GCCBuiltin<"__builtin_or1k_mtspr">,
+  Intrinsic<[], [llvm_i32_ty, llvm_i32_ty], []>;
+
 }

@@ -89,6 +89,9 @@ private:
   SDNode *SelectMulHiLo(SDNode *Node, bool Signed);
   SDNode *SelectMulHi(SDNode *Node, bool Signed);
 
+  SDNode *SelectMFSPR(SDNode *Node);
+  SDNode *SelectMTSPR(SDNode *Node);
+
   SDValue getGlobalBaseReg();
 
   // Complex Pattern for address selection.
@@ -205,6 +208,13 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
   switch(Opcode) {
   default: break;
   case ISD::FrameIndex: return SelectFrameIndex(Node);
+  case ISD::INTRINSIC_VOID: // fall-through
+  case ISD::INTRINSIC_W_CHAIN:
+    switch (cast<ConstantSDNode>(Node->getOperand(1))->getZExtValue()) {
+    case Intrinsic::or1k_mfspr: return SelectMFSPR(Node);
+    case Intrinsic::or1k_mtspr: return SelectMTSPR(Node);
+    }
+    break;
   case OR1KISD::GLOBAL_BASE_REG: return getGlobalBaseReg().getNode();
   }
 
@@ -261,6 +271,45 @@ SDNode* OR1KDAGToDAGISel::SelectMulHi(SDNode *Node, bool Signed) {
   CurDAG->ReplaceAllUsesOfValueWith(SDValue(Node, 0), SDValue(Mul, 1));
 
   return Mul;
+}
+
+
+SDNode *OR1KDAGToDAGISel::SelectMFSPR(SDNode *Node) {
+  SDLoc dl(Node);
+  EVT OutTy = Node->getValueType(0);
+  // Register, immediate, Chain
+  SDValue Ops[3];
+
+  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Node->getOperand(2))) {
+    Ops[0] = CurDAG->getRegister(OR1K::R0, MVT::i32);
+    Ops[1] = CurDAG->getTargetConstant(C->getZExtValue(), MVT::i32);
+  } else {
+    Ops[0] = Node->getOperand(2);
+    Ops[1] = CurDAG->getTargetConstant(0, MVT::i32);
+  }
+
+  Ops[2] = Node->getOperand(0);
+
+  return CurDAG->getMachineNode(OR1K::MFSPR, dl, OutTy, MVT::Other, Ops);
+}
+
+SDNode *OR1KDAGToDAGISel::SelectMTSPR(SDNode *Node) {
+  SDLoc dl(Node);
+  // Register, SrcReg, Immediate, Chain
+  SDValue Ops[4];
+
+  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Node->getOperand(3))) {
+    Ops[0] = CurDAG->getRegister(OR1K::R0, MVT::i32);
+    Ops[2] = CurDAG->getTargetConstant(C->getZExtValue(), MVT::i32);
+  } else {
+    Ops[0] = Node->getOperand(3);
+    Ops[2] = CurDAG->getTargetConstant(0, MVT::i32);
+  }
+
+  Ops[1] = Node->getOperand(2);
+  Ops[3] = Node->getOperand(0);
+
+  return CurDAG->getMachineNode(OR1K::MTSPR, dl, MVT::Other, Ops);
 }
 
 /// createOR1KISelDag - This pass converts a legalized DAG into a
