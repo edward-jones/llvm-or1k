@@ -78,6 +78,9 @@ BitVector OR1KRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(OR1K::R9);
   Reserved.set(OR1K::R10);
 
+  Reserved.set(OR1K::MACLO);
+  Reserved.set(OR1K::MACHI);
+
   if (TFI->hasFP(MF))
     Reserved.set(getFrameRegister(MF));
 
