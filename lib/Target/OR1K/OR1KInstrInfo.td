@@ -767,9 +767,9 @@ def MACRC : MAC_R<"l.macrc", []>;
 // MOVE from/to special register instructions
 //===----------------------------------------------------------------------===//
 
-class MOVE_FROM_SP<string asmstr>
+class MOVE_FROM_SP<string asmstr, list<dag> pattern>
   : InstRI<0xd, (outs GPR:$rD), (ins GPR:$rA, s16imm:$imm),
-    !strconcat(asmstr, "\t$rD, $rA, $imm"), []> {
+    !strconcat(asmstr, "\t$rD, $rA, $imm"), pattern> {
   bits<5> rD;
   bits<5> rA;
   bits<16> imm;
@@ -779,11 +779,9 @@ class MOVE_FROM_SP<string asmstr>
   let Inst{15-0} = imm;
 }
 
-def MFSPR : MOVE_FROM_SP<"l.mfspr">;
-
-class MOVE_TO_SP<string asmstr>
+class MOVE_TO_SP<string asmstr, list<dag> pattern>
   : InstRR<0x0, (outs), (ins GPR:$rA, GPR:$rB, s16imm:$imm),
-    !strconcat(asmstr, "\t$rA, $rB, $imm"), []> {
+    !strconcat(asmstr, "\t$rA, $rB, $imm"), pattern> {
   bits<5> rA;
   bits<5> rB;
   bits<16> imm;
@@ -794,7 +792,13 @@ class MOVE_TO_SP<string asmstr>
   let Inst{10-0} = imm{10-0};
 }
 
-def MTSPR : MOVE_TO_SP<"l.mtspr">;
+// FIXME: We model this instructions with side effects to avoid reordering
+//        of instruction by the scheduler because we don't have the proper
+//        defs and uses for each special register.
+let hasSideEffects = 1 in {
+  def MTSPR : MOVE_TO_SP<"l.mtspr", []>;
+  def MFSPR : MOVE_FROM_SP<"l.mfspr", []>;
+}
 
 //===----------------------------------------------------------------------===//
 // Non-Instruction Patterns
