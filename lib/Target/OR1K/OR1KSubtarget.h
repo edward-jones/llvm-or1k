@@ -65,6 +65,10 @@ public:
                              AntiDepBreakMode& Mode,
                              RegClassVector& CriticalPathRCs) const override;
 
+  bool enableMachineScheduler() const override {
+    return true;
+  }
+
 private:
   virtual void anchor();
 
