@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implents the Funny NOP Replacer Pass. This pass is responsible for
-// substituing normal NOPs with funny NOPs.
+// This file implements the Funny NOP Replacer Pass. This pass is responsible
+// for substituting normal NOPs with funny NOPs.
 //
 //===----------------------------------------------------------------------===//
 
@@ -54,24 +54,24 @@ static unsigned int getRandomHexSpeakCode(const unsigned (&array)[N]) {
 }
 
 namespace {
-  class FunnyNOP : public MachineFunctionPass {
-  public:
-    static char ID;
-    FunnyNOP() : MachineFunctionPass(ID) { }
+class FunnyNOP : public MachineFunctionPass {
+public:
+  static char ID;
+  FunnyNOP() : MachineFunctionPass(ID) {}
 
-    virtual const char *getPassName() const {
-      return "OR1K Funny NOP replacer";
-    }
+  const char *getPassName() const override {
+    return "OR1K Funny NOP replacer";
+  }
 
-    bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
-    bool runOnMachineFunction(MachineFunction &F) override {
-      bool Changed = false;
-      for (MachineBasicBlock &FB : F) {
-          Changed |= runOnMachineBasicBlock(FB);
-      }
-      return Changed;
+  bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
+  bool runOnMachineFunction(MachineFunction &F) override {
+    bool Changed = false;
+    for (MachineBasicBlock &FB : F) {
+      Changed |= runOnMachineBasicBlock(FB);
     }
-  };
+    return Changed;
+  }
+};
 
 } // end of anonymous namespace
 
@@ -95,11 +95,12 @@ bool FunnyNOP::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
   // Iterate over each instruction of the basic block
   for (MachineInstr &I : MBB) {
     // If the instruction is a NOP replace its immediate value with a funny one.
-    if(I.getDesc().getOpcode() == OR1K::NOP) {
+    if (I.getDesc().getOpcode() == OR1K::NOP) {
       MachineOperand &NopImmediate = I.getOperand(0);
       NopImmediate.setImm(getRandomHexSpeakCode(hexSpeakCodes));
       Changed = true;
     }
   }
+
   return Changed;
 }
