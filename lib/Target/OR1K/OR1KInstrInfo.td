@@ -17,9 +17,9 @@
 
 include "OR1KInstrFormats.td"
 
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 // Instruction Operands and Patterns
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 
 //  These are target-independent nodes, but have target-specific formats.
 def SDT_OR1KCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i32> ]>;
@@ -183,10 +183,9 @@ def HasSFII      : Predicate<"Subtarget.hasSFII()">,
 def HasFBit      : Predicate<"Subtarget.hasFBit()">,
                    AssemblerPredicate<"FeatureFBit">;
 
-
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 // Condition/SF instructions
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 
 class SF_RR<bits<5> op2Val, string asmstr, PatLeaf Cond>
   : InstRR<0x9, (outs), (ins GPR:$rA, GPR:$rB),
@@ -238,9 +237,10 @@ defm SFGES : SF<0xb, "l.sfges", OR1K_CC_GE>;
 defm SFLTS : SF<0xc, "l.sflts", OR1K_CC_LT>;
 defm SFLES : SF<0xd, "l.sfles", OR1K_CC_LE>;
 }
-// -------------------------------------------------- //
+
+//===----------------------------------------------------------------------===//
 // ALU instructions
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 
 class ALU_RI<bits<4> subOp, dag outs, dag ins, string asmstr,
              list<dag> pattern, InstrItinClass itin>
@@ -392,9 +392,9 @@ def FF1 : ALU2_RR<0x0, 0xf, "l.ff1", OR1Kff1>;
 def FL1 : ALU2_RR<0x1, 0xf, "l.fl1", OR1Kfl1>;
 }
 
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 // SHIFT instructions
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 
 class SHIFT_RR<bits<2> op2Val, string asmstr, SDNode OpNode,
                InstrItinClass itin>
@@ -452,11 +452,9 @@ defm SRA : SHIFT<0x2, "l.sra", sra, II_ALU>;
 let Predicates=[HasRor] in
   defm ROR : SHIFT<0x3, "l.ror", rotr, II_ROT>;
 
-
-
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 // STORE instructions
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 
 class STORE<bits<4> subOp, string asmstring, list<dag> pattern>
   : InstRR<subOp, (outs), (ins GPR:$rB, MEMri:$dst),
@@ -479,9 +477,9 @@ def SW : STOREi32<0x5, "l.sw", store>;
 def SB : STOREi32<0x6, "l.sb", truncstorei8>;
 def SH : STOREi32<0x7, "l.sh", truncstorei16>;
 
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 // LOAD instructions
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 
 class LOAD<bits<4> subop, string asmstring, list<dag> pattern>
   : InstRI<subop, (outs GPR:$rD), (ins MEMri:$src),
@@ -504,11 +502,9 @@ def LBS : LOADi32<0x4, "l.lbs", sextloadi8>;
 def LHZ : LOADi32<0x5, "l.lhz", zextloadi16>;
 def LHS : LOADi32<0x6, "l.lhs", sextloadi16>;
 
-
-// -------------------------------------------------- //
+//===----------------------------------------------------------------------===//
 // BRANCH instructions
-// -------------------------------------------------- //
-
+//===----------------------------------------------------------------------===//
 
 class BRANCH<bits<4> subOp, string asmstring,
              list<dag> pattern, InstrItinClass itin>
@@ -567,8 +563,7 @@ let isBranch = 1, isTerminator = 1, hasDelaySlot=1 in {
 }
 
 // Jump and link
-let isCall=1, hasDelaySlot=1,
-    Uses = [R1],
+let isCall = 1, hasDelaySlot = 1, Uses = [R1],
     // Potentially clobbered registers
     Defs = [R3, R4, R5, R6, R7, R8, R9, R11, R12, R13, R15, R17, R19, R21, R23,
             R25, R27, R29, R31] in {
@@ -603,10 +598,10 @@ let isReturn = 1, isTerminator = 1, hasDelaySlot=1, isBarrier = 1, Uses=[R9], In
 // Pessimistically assume ADJCALLSTACKDOWN / ADJCALLSTACKUP will become
 // sub / add which can clobber R1.
 let Defs = [R1], Uses = [R1] in {
-def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i32imm:$amt),
-                              "#ADJCALLSTACKDOWN $amt",
-                              [(callseq_start timm:$amt)]>;
-def ADJCALLSTACKUP   : Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
+  def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i32imm:$amt),
+                                "#ADJCALLSTACKDOWN $amt",
+                                [(callseq_start timm:$amt)]>;
+  def ADJCALLSTACKUP : Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
                               "#ADJCALLSTACKUP $amt1 $amt2",
                               [(callseq_end timm:$amt1, timm:$amt2)]>;
 }
@@ -667,10 +662,10 @@ class EXTEND<bits<4> op2Val, bits<4> op3Val, string asmstring, list<dag> pattern
 }
 
 let Predicates=[HasExt] in {
-def EXT_BYTE_SIGN :
-	  EXTEND<0x1, 0xc, "l.extbs", [(set GPR:$rD, (sext_inreg GPR:$rA, i8))]>;
-def EXT_HALF_SIGN :
-	  EXTEND<0x0, 0xc, "l.exths", [(set GPR:$rD, (sext_inreg GPR:$rA, i16))]>;
+def EXT_BYTE_SIGN : EXTEND<0x1, 0xc, "l.extbs",
+                           [(set GPR:$rD, (sext_inreg GPR:$rA, i8))]>;
+def EXT_HALF_SIGN : EXTEND<0x0, 0xc, "l.exths",
+                           [(set GPR:$rD, (sext_inreg GPR:$rA, i16))]>;
 def EXT_WORD_SIGN : EXTEND<0x0, 0xd, "l.extws", []>;
 
 def EXT_BYTE_ZERO : EXTEND<0x3, 0xc, "l.extbz", []>;
@@ -763,7 +758,7 @@ def MACRC : MAC_R<"l.macrc", []>;
 }
 
 //===----------------------------------------------------------------------===//
-// MOVE from/to special register
+// MOVE from/to special register instructions
 //===----------------------------------------------------------------------===//
 
 class MOVE_FROM_SP<string asmstr>
