@@ -77,6 +77,9 @@ def : ProcessorModel<"generic", OR1KSchedMachineModel,
                      []>;
 def : ProcessorModel<"or1200", OR1KSchedMachineModel,
                      [FeatureMul, FeatureRor, FeatureExt, FeatureSFII]>;
+def : ProcessorModel<"pulp", OR1KSchedMachineModel,
+                     [FeatureMul, FeatureRor, FeatureExt, FeatureSFII,
+                      FeatureCmov, NewABI]>;
 
 def OR1KInstPrinter : AsmWriter {
   string AsmWriterClassName  = "InstPrinter";
