@@ -12,4 +12,28 @@
 //===----------------------------------------------------------------------===//
 
 let TargetPrefix = "or1k" in {  // All intrinsics start with "llvm.or1k.".
+
+//===----------------------------------------------------------------------===//
+// OR1K GCC Builtin and Intrinsic for OS interaction and hardware
+// synchronization instruction.
+//===----------------------------------------------------------------------===//
+
+def int_or1k_csync : GCCBuiltin<"__builtin_or1k_csync">,
+  Intrinsic<[], [], []>;
+
+def int_or1k_msync : GCCBuiltin<"__builtin_or1k_msync">,
+  Intrinsic<[], [], []>;
+
+def int_or1k_psync : GCCBuiltin<"__builtin_or1k_psync">,
+  Intrinsic<[], [], []>;
+
+def int_or1k_sys : GCCBuiltin<"__builtin_or1k_sys">,
+  Intrinsic<[], [llvm_i32_ty], []>;
+
+def int_or1k_trap : GCCBuiltin<"__builtin_or1k_trap">,
+  Intrinsic<[], [llvm_i32_ty], []>;
+
+def int_or1k_rfe : GCCBuiltin<"__builtin_or1k_rfe">,
+  Intrinsic<[], [], []>;
+
 }

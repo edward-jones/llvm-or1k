@@ -688,9 +688,14 @@ class FixedOp<bits<32> op, string asmstr, list<dag> pattern>
   let Inst{31-0} = op;
 }
 
-def CONTX_SYNC : FixedOp<0x23000000, "l.csync", []>;
-def MEM_SYNC : FixedOp<0x22000000, "l.msync", []>;
-def PIPE_SYNC : FixedOp<0x22800000, "l.psync", []>;
+let hasSideEffects = 1 in {
+  def CONTX_SYNC :
+    FixedOp<0x23000000, "l.csync", [(int_or1k_csync)]>;
+  def MEM_SYNC :
+    FixedOp<0x22000000, "l.msync", [(int_or1k_msync)]>;
+  def PIPE_SYNC :
+    FixedOp<0x22800000, "l.psync", [(int_or1k_psync)]>;
+}
 
 //===----------------------------------------------------------------------===//
 // OS interaction instructions
@@ -705,10 +710,11 @@ class InstOS<bits<16> op, string asmstring, list<dag> pattern>
   let Inst{15-0} = imm;
 }
 
-def SYS : InstOS<0x2000, "l.sys", []>;
-def TRAP : InstOS<0x2100, "l.trap", []>;
-
-def RFE : FixedOp<0x90000000, "l.rfe", []>;
+let hasSideEffects = 1 in {
+  def SYS : InstOS<0x2000, "l.sys", [(int_or1k_sys immZExt16:$imm)]>;
+  def TRAP : InstOS<0x2100, "l.trap", [(int_or1k_trap immZExt16:$imm)]>;
+  def RFE : FixedOp<0x90000000, "l.rfe", [(int_or1k_rfe)]>;
+}
 
 //===----------------------------------------------------------------------===//
 // MAC instructions
