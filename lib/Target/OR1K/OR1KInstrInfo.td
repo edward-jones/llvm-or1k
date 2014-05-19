@@ -362,7 +362,7 @@ class ALU_MULD<bits<4> subOp, string asmstr, InstrItinClass itin>
   : ALU_D<0x3, subOp, asmstr, [], itin>;
 
 let Predicates=[HasMul64] in {
-  let isCommutable = 1, neverHasSideEffects = 1, Defs = [MACLO, MACHI] in {
+  let isCommutable = 1, hasSideEffects = 0, Defs = [MACLO, MACHI] in {
     def MULD  : ALU_MULD<0x7, "l.muld", II_MUL>;
     def MULDU : ALU_MULD<0xc, "l.muldu", II_MUL>;
   }
@@ -583,7 +583,7 @@ class NOP_I<bits<2> op2Val, string asmstr, InstrItinClass itin>
   let op2 = op2Val;
 }
 
-let neverHasSideEffects = 1 in
+let hasSideEffects = 0 in
   def NOP : NOP_I<0x1, "l.nop", II_NOP>;
 
 let isReturn = 1, isTerminator = 1, hasDelaySlot=1, isBarrier = 1, Uses=[R9], Inst = 0x44004800 in {
@@ -619,7 +619,7 @@ let Uses = [SR_F], usesCustomInserter = 1, Predicates = [NoCmov] in {
 }
 
 
-let neverHasSideEffects = 1, Defs = [R9], Uses = [R9] in
+let hasSideEffects = 0, Defs = [R9], Uses = [R9] in
   def GET_GLOBAL_BASE : Pseudo<(outs GPR:$gp), (ins),
                                "#GET_GLOBAL_BASE $gp", []>;
 
