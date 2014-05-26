@@ -1,4 +1,5 @@
-; RUN: llc -march=or1k -mattr=mul,mul64 < %s | FileCheck %s
+; RUN: llc -march=or1k < %s | FileCheck %s
+; RUN: llc -march=or1k -mattr=mul64 < %s | FileCheck --check-prefix=CHECK-MUL64 %s
 
 define i64 @add64rr(i64 %a, i64 %b) {
 entry:
@@ -36,9 +37,13 @@ entry:
   ret i64 %mul
 }
 ; CHECK: mul64:
-; CHECK: l.muldu
-; CHECK-NEXT: l.mfspr
-; CHECK-NEXT: l.mfspr
+; CHECK: jal __muldi3
+
+; CHECK-MUL64: mul64:
+; CHECK-MUL64: l.muldu
+; CHECK-MUL64-NEXT: l.mfspr
+; CHECK-MUL64-NEXT: l.mfspr
+
 
 define i64 @smul64(i32 %a, i32 %b) #0 {
 entry:
@@ -47,7 +52,11 @@ entry:
   %mul = mul nsw i64 %aext, %bext
   ret i64 %mul
 }
+
 ; CHECK: mul64:
-; CHECK: l.muld
-; CHECK-NEXT: l.mfspr
-; CHECK-NEXT: l.mfspr
+; CHECK: jal __muldi3
+
+; CHECK-MUL64: mul64:
+; CHECK-MUL64: l.muld
+; CHECK-MUL64-NEXT: l.mfspr
+; CHECK-MUL64-NEXT: l.mfspr

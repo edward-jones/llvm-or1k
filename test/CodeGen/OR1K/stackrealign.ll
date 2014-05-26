@@ -15,9 +15,9 @@ entry:
 ; CHECK: l.srli  [[SCRATCHREG]], [[SCRATCHREG]], 3
 ; CHECK: l.slli  r1, [[SCRATCHREG]], 3
 ; check that the stack pointer is used to address stack object
-; CHECK: l.sw    0(r1), r0
 ; CHECK: l.addi  [[REG:r[0-9]+]], r0, 1
 ; CHECK: l.sw    4(r1), [[REG]]
+; CHECK: l.sw    0(r1), r0
 ; check that the stack pointer is restored from the frame pointer
 ; CHECK: l.ori  r1, r2, 0
 

@@ -18,41 +18,62 @@
 include "OR1KInstrFormats.td"
 
 //===----------------------------------------------------------------------===//
-// Instruction Operands and Patterns
+// Feature support predicates
 //===----------------------------------------------------------------------===//
 
-//  These are target-independent nodes, but have target-specific formats.
-def SDT_OR1KCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i32> ]>;
-def SDT_OR1KCallSeqEnd   : SDCallSeqEnd<[ SDTCisVT<0, i32>,
-                                          SDTCisVT<1, i32> ]>;
-def SDT_OR1KCall         : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
-def SDT_OR1KSetFlag      : SDTypeProfile<0, 3, [SDTCisSameAs<0, 1>]>;
-def SDT_OR1KSelectCC     : SDTypeProfile<1, 2, [SDTCisSameAs<0, 1>,
-                                                SDTCisSameAs<1, 2>]>;
-def SDT_OR1KBrCC         : SDTypeProfile<0, 2, [SDTCisVT<0, OtherVT>]>;
-def SDT_OR1KWrapper      : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>,
-                                                SDTCisPtrTy<0>]>;
+def HasDiv : Predicate<"Subtarget.hasDiv()">,
+             AssemblerPredicate<"FeatureDiv">;
+def HasMul : Predicate<"Subtarget.hasMul()">,
+             AssemblerPredicate<"FeatureMul">;
+def HasMul64 : Predicate<"Subtarget.hasMul64()">,
+               AssemblerPredicate<"FeatureMul64">;
+def HasRor : Predicate<"Subtarget.hasRor()">,
+             AssemblerPredicate<"FeatureRor">;
+def HasCmov : Predicate<"Subtarget.hasCmov()">,
+              AssemblerPredicate<"FeatureCmov">;
+def NoCmov  : Predicate<"!Subtarget.hasCmov()">,
+              AssemblerPredicate<"!FeatureCmov">;
+def HasMAC : Predicate<"Subtarget.hasMAC()">,
+             AssemblerPredicate<"FeatureMAC">;
+def HasExt : Predicate<"Subtarget.hasExt()">,
+             AssemblerPredicate<"FeatureExt">;
+def HasSFII : Predicate<"Subtarget.hasSFII()">,
+              AssemblerPredicate<"FeatureSFII">;
+def HasFBit : Predicate<"Subtarget.hasFBit()">,
+              AssemblerPredicate<"FeatureFBit">;
 
-def call            : SDNode<"OR1KISD::CALL", SDT_OR1KCall,
-                             [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
-                              SDNPVariadic]>;
-def retflag         : SDNode<"OR1KISD::RET_FLAG", SDTNone,
-                             [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
-def callseq_start   : SDNode<"ISD::CALLSEQ_START", SDT_OR1KCallSeqStart,
-                             [SDNPHasChain, SDNPOutGlue]>;
-def callseq_end     : SDNode<"ISD::CALLSEQ_END",   SDT_OR1KCallSeqEnd,
-                             [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
-def OR1Ksetflag     : SDNode<"OR1KISD::SET_FLAG", SDT_OR1KSetFlag,
-                             [SDNPOutGlue]>;
-def OR1Kbrcc        : SDNode<"OR1KISD::BR_CC", SDT_OR1KBrCC,
-                              [SDNPHasChain, SDNPInGlue]>;
-def OR1Kselectcc    : SDNode<"OR1KISD::SELECT_CC", SDT_OR1KSelectCC,
-                              [SDNPInGlue]>;
-def OR1KWrapper     : SDNode<"OR1KISD::Wrapper", SDT_OR1KWrapper>;
-def OR1KHi          : SDNode<"OR1KISD::HI", SDTIntUnaryOp>;
-def OR1KLo          : SDNode<"OR1KISD::LO", SDTIntUnaryOp>;
-def OR1Kff1         : SDNode<"OR1KISD::FF1", SDTIntUnaryOp>;
-def OR1Kfl1         : SDNode<"OR1KISD::FL1", SDTIntUnaryOp>;
+//===----------------------------------------------------------------------===//
+// Custom SDNodes
+//===----------------------------------------------------------------------===//
+
+def callseq_start : SDNode<"ISD::CALLSEQ_START",
+                           SDCallSeqStart<[ SDTCisVT<0, i32>]>,
+                           [SDNPHasChain, SDNPOutGlue]>;
+def callseq_end : SDNode<"ISD::CALLSEQ_END",
+                         SDCallSeqEnd<[SDTCisVT<0, i32>, SDTCisVT<1, i32>]>,
+                         [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
+
+def SDT_OR1KCall : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+def SDT_OR1KSetFlag : SDTypeProfile<0, 3, [SDTCisSameAs<0, 1>]>;
+def SDT_OR1KBrCond : SDTypeProfile<0, 2, [SDTCisVT<0, OtherVT>]>;
+def SDT_OR1KSelect : SDTypeProfile<1, 2, [SDTCisSameAs<0, 1>,
+                                          SDTCisSameAs<1, 2>]>;
+
+def OR1KCall : SDNode<"OR1KISD::Call", SDT_OR1KCall,
+                      [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue, SDNPVariadic]>;
+def OR1KReturn : SDNode<"OR1KISD::Return", SDTNone,
+                        [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
+def OR1KSetFlag : SDNode<"OR1KISD::SetFlag", SDT_OR1KSetFlag, [SDNPOutGlue]>;
+def OR1KBrCond : SDNode<"OR1KISD::BrCond", SDT_OR1KBrCond,
+                        [SDNPHasChain, SDNPInGlue]>;
+def OR1KSelect : SDNode<"OR1KISD::Select", SDT_OR1KSelect, [SDNPInGlue]>;
+def OR1KHiLo : SDNode<"OR1KISD::HiLo", SDTIntBinOp>;
+def OR1KFF1 : SDNode<"OR1KISD::FF1", SDTIntUnaryOp>;
+def OR1KFL1 : SDNode<"OR1KISD::FL1", SDTIntUnaryOp>;
+
+//===----------------------------------------------------------------------===//
+// Instruction Operands and Operand Patterns
+//===----------------------------------------------------------------------===//
 
 // Extract bits 0-15 (low-end) of an immediate value.
 def LO16 : SDNodeXForm<imm, [{
@@ -120,77 +141,17 @@ def MEMri : Operand<iPTR> {
   let ParserMatchClass = MemAsmOperand;
 }
 
-// Conditional code predicates - used for pattern matching for SF instructions
-def OR1K_CC_EQ  : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETEQ);}]>;
-def OR1K_CC_NE  : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETNE);}]>;
-def OR1K_CC_LE  : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETLE);}]>;
-def OR1K_CC_LT  : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETLT);}]>;
-def OR1K_CC_GE  : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETGE);}]>;
-def OR1K_CC_GT  : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETGT);}]>;
-def OR1K_CC_GTU : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETUGT);}]>;
-def OR1K_CC_GEU : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETUGE);}]>;
-def OR1K_CC_LTU : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETULT);}]>;
-def OR1K_CC_LEU : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETULE);}]>;
-def OR1K_CC_GTO : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETOGT);}]>;
-def OR1K_CC_GEO : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETOGE);}]>;
-def OR1K_CC_LTO : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETOLT);}]>;
-def OR1K_CC_LEO : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETOLE);}]>;
-def OR1K_CC_EQO : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETOEQ);}]>;
-def OR1K_CC_NEO : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETONE);}]>;
-def OR1K_CC_O   : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETO);}]>;
-def OR1K_CC_UO  : PatLeaf<(imm),
-                  [{return (N->getZExtValue() == ISD::SETUO);}]>;
-
-def OR1K_COND     : PatLeaf<(i32 0)>;
-def OR1K_COND_NEG : PatLeaf<(i32 1)>;
-
-// Feature support predicates
-def HasDiv       : Predicate<"Subtarget.hasDiv()">,
-                   AssemblerPredicate<"FeatureDiv">;
-def HasMul       : Predicate<"Subtarget.hasMul()">,
-                   AssemblerPredicate<"FeatureMul">;
-def HasMul64     : Predicate<"Subtarget.hasMul64()">,
-                   AssemblerPredicate<"FeatureMul64">;
-def HasRor       : Predicate<"Subtarget.hasRor()">,
-                   AssemblerPredicate<"FeatureRor">;
-def HasCmov      : Predicate<"Subtarget.hasCmov()">,
-                   AssemblerPredicate<"FeatureCmov">;
-def NoCmov       : Predicate<"!Subtarget.hasCmov()">,
-                   AssemblerPredicate<"!FeatureCmov">;
-def HasMAC       : Predicate<"Subtarget.hasMAC()">,
-                   AssemblerPredicate<"FeatureMAC">;
-def HasExt       : Predicate<"Subtarget.hasExt()">,
-                   AssemblerPredicate<"FeatureExt">;
-def HasSFII      : Predicate<"Subtarget.hasSFII()">,
-                   AssemblerPredicate<"FeatureSFII">;
-def HasFBit      : Predicate<"Subtarget.hasFBit()">,
-                   AssemblerPredicate<"FeatureFBit">;
+def F  : PatLeaf<(i32 0)>;
+def NF : PatLeaf<(i32 1)>;
 
 //===----------------------------------------------------------------------===//
 // Condition/SF instructions
 //===----------------------------------------------------------------------===//
 
-class SF_RR<bits<5> op2Val, string asmstr, PatLeaf Cond>
+class SF_RR<bits<5> op2Val, string asmstr, CondCode Cond>
   : InstRR<0x9, (outs), (ins GPR:$rA, GPR:$rB),
            !strconcat(asmstr, "\t$rA, $rB"),
-           [(OR1Ksetflag (i32 GPR:$rA), (i32 GPR:$rB), Cond)],
+           [(OR1KSetFlag (i32 GPR:$rA), (i32 GPR:$rB), Cond)],
            II_SET_FLAG_IF> {
   bits<5> op2;
   bits<5> rA;
@@ -203,10 +164,10 @@ class SF_RR<bits<5> op2Val, string asmstr, PatLeaf Cond>
   let op2 = op2Val;
 }
 
-class SF_RI<bits<5> op2Val, string asmstr, PatLeaf Cond>
+class SF_RI<bits<5> op2Val, string asmstr, CondCode Cond>
   : InstRI<0xf, (outs), (ins GPR:$rA, s16imm:$imm),
            !strconcat(asmstr, "i\t$rA, $imm"),
-           [(OR1Ksetflag (i32 GPR:$rA), immSExt16:$imm, Cond)],
+           [(OR1KSetFlag (i32 GPR:$rA), immSExt16:$imm, Cond)],
            II_SET_FLAG_IF> {
   bits<5> op2;
   bits<5> rA;
@@ -219,23 +180,24 @@ class SF_RI<bits<5> op2Val, string asmstr, PatLeaf Cond>
   let op2 = op2Val;
 }
 
-multiclass SF<bits<5> op2Val, string asmstr, PatLeaf Cond> {
+multiclass SF<bits<5> op2Val, string asmstr, CondCode Cond> {
   def _rr : SF_RR<op2Val, asmstr, Cond>;
-  let Predicates=[HasSFII] in def _ri : SF_RI<op2Val, asmstr, Cond>;
+  let Predicates=[HasSFII] in
+    def _ri : SF_RI<op2Val, asmstr, Cond>;
 }
 
 // l.sfxx instructions
 let Defs = [SR_F] in {
-defm SFEQ  : SF<0x0, "l.sfeq",  OR1K_CC_EQ>;
-defm SFNE  : SF<0x1, "l.sfne",  OR1K_CC_NE>;
-defm SFGTU : SF<0x2, "l.sfgtu", OR1K_CC_GTU>;
-defm SFGEU : SF<0x3, "l.sfgeu", OR1K_CC_GEU>;
-defm SFLTU : SF<0x4, "l.sfltu", OR1K_CC_LTU>;
-defm SFLEU : SF<0x5, "l.sfleu", OR1K_CC_LEU>;
-defm SFGTS : SF<0xa, "l.sfgts", OR1K_CC_GT>;
-defm SFGES : SF<0xb, "l.sfges", OR1K_CC_GE>;
-defm SFLTS : SF<0xc, "l.sflts", OR1K_CC_LT>;
-defm SFLES : SF<0xd, "l.sfles", OR1K_CC_LE>;
+  defm SFEQ  : SF<0x0, "l.sfeq",  SETEQ>;
+  defm SFNE  : SF<0x1, "l.sfne",  SETNE>;
+  defm SFGTU : SF<0x2, "l.sfgtu", SETUGT>;
+  defm SFGEU : SF<0x3, "l.sfgeu", SETUGE>;
+  defm SFLTU : SF<0x4, "l.sfltu", SETULT>;
+  defm SFLEU : SF<0x5, "l.sfleu", SETULE>;
+  defm SFGTS : SF<0xa, "l.sfgts", SETGT>;
+  defm SFGES : SF<0xb, "l.sfges", SETGE>;
+  defm SFLTS : SF<0xc, "l.sflts", SETLT>;
+  defm SFLES : SF<0xd, "l.sfles", SETLE>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -311,7 +273,9 @@ let isAsCheapAsAMove = 1 in {
     def ADD  : ALU_STD_RR<0x0, "l.add", add, II_ALU>;
     let Uses = [SR_CY] in def ADDC : ALU_STD_RR<0x1, "l.addc", adde, II_ALU>;
   }
+
   def SUB  : ALU_STD_RR<0x2, "l.sub", sub, II_ALU>;
+
   let isCommutable=1 in {
     def AND  : ALU_STD_RR<0x3, "l.and", and, II_ALU>;
     def OR   : ALU_STD_RR<0x4, "l.or", or, II_ALU>;
@@ -323,18 +287,18 @@ def : Pat<(addc GPR:$rA, GPR:$rB),
           (ADD GPR:$rA, GPR:$rB)>;
 
 let Uses = [SR_F], Predicates = [HasCmov] in
-  def CMOV : ALU_STD_RR<0xe, "l.cmov", OR1Kselectcc, II_CMOV>;
+  def CMOV : ALU_STD_RR<0xe, "l.cmov", OR1KSelect, II_CMOV>;
 
 class ALU_OPT_RR<bits<4> subOp, string asmstr, SDNode OpNode,
                  InstrItinClass itin>
   : ALU_RR<0x3, subOp, asmstr,
            [(set GPR:$rD, (OpNode (i32 GPR:$rA), (i32 GPR:$rB)))], itin>;
 
-let isCommutable=1, Predicates=[HasMul] in {
+let isCommutable = 1, Predicates = [HasMul] in {
   let Defs = [SR_OV] in def MUL  : ALU_OPT_RR<0x6, "l.mul", mul, II_MUL>;
   let Defs = [SR_CY] in def MULU : ALU_OPT_RR<0xb, "l.mulu", mul, II_MUL>;
 }
-let Predicates=[HasDiv] in {
+let Predicates = [HasDiv] in {
   let Defs = [SR_OV] in def DIV  : ALU_OPT_RR<0x9, "l.div", sdiv, II_DIV>;
   let Defs = [SR_CY] in def DIVU : ALU_OPT_RR<0xa, "l.divu", udiv, II_DIV>;
 }
@@ -387,9 +351,29 @@ class ALU2_RR<bits<2> subOp1, bits<4> subOp2, string asmstr, SDNode OpNode>
   let op3 = subOp2;
 }
 
-let Predicates=[HasFBit] in {
-def FF1 : ALU2_RR<0x0, 0xf, "l.ff1", OR1Kff1>;
-def FL1 : ALU2_RR<0x1, 0xf, "l.fl1", OR1Kfl1>;
+let Predicates = [HasFBit] in {
+def FF1 : ALU2_RR<0x0, 0xf, "l.ff1", OR1KFF1>;
+def FL1 : ALU2_RR<0x1, 0xf, "l.fl1", OR1KFL1>;
+}
+
+//===----------------------------------------------------------------------===//
+// MOVHI instruction
+//===----------------------------------------------------------------------===//
+
+class MOVHI_I <dag outs, dag ins, list<dag> pattern, InstrItinClass itin>
+  : InstOR1K<outs, ins,  "l.movhi\t$rD, $imm", pattern, itin> {
+  bits<16> imm;
+  bits<5> rD;
+  let optype = 0;
+  let opcode = 0x6;
+  let Inst{16} = 0;
+  let Inst{15-0} = imm;
+  let Inst{25-21} = rD;
+}
+
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
+  def MOVHI : MOVHI_I<(outs GPR:$rD), (ins i32imm:$imm),
+                      [(set GPR:$rD, i32hi16:$imm)], II_MOVHI>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -540,7 +524,7 @@ class BRANCH_R<bits<4> subOp, string asmstring,
 
 class BRANCHL_R<bits<4> subOp, string asmstring,  InstrItinClass itin>
   : InstBR<subOp, (outs), (ins GPR:$rB),
-           !strconcat(asmstring, "\t$rB"), [(call GPR:$rB)], itin> {
+           !strconcat(asmstring, "\t$rB"), [(OR1KCall GPR:$rB)], itin> {
   bits<5> rB;
 
   let Inst{15-11} = rB;
@@ -557,8 +541,8 @@ let isBranch = 1, isTerminator = 1, hasDelaySlot=1 in {
     }
   }
   let Uses = [SR_F] in {
-    def BNF : BRANCH<0x3, "l.bnf", [(OR1Kbrcc bb:$dst, OR1K_COND_NEG)], II_BRANCH>;
-    def BF  : BRANCH<0x4, "l.bf",  [(OR1Kbrcc bb:$dst, OR1K_COND)], II_BRANCH>;
+    def BNF : BRANCH<0x3, "l.bnf", [(OR1KBrCond bb:$dst, NF)], II_BRANCH>;
+    def BF  : BRANCH<0x4, "l.bf",  [(OR1KBrCond bb:$dst, F)], II_BRANCH>;
   }
 }
 
@@ -586,62 +570,16 @@ class NOP_I<bits<2> op2Val, string asmstr, InstrItinClass itin>
 let hasSideEffects = 0 in
   def NOP : NOP_I<0x1, "l.nop", II_NOP>;
 
-let isReturn = 1, isTerminator = 1, hasDelaySlot=1, isBarrier = 1, Uses=[R9], Inst = 0x44004800 in {
+let isReturn = 1, isTerminator = 1, hasDelaySlot=1,
+    isBarrier = 1, Uses = [R9], Inst = 0x44004800 in {
   def RET : InstBR<0x1, (outs), (ins),
                    "l.jr\tr9",
-                   [(retflag)]>;
+                   [(OR1KReturn)]>;
 }
 
-// ADJCALLSTACKDOWN/UP implicitly use/def R1 because they may be expanded into
-// a stack adjustment and the codegen must know that they may modify the stack
-// pointer before prolog-epilog rewriting occurs.
-// Pessimistically assume ADJCALLSTACKDOWN / ADJCALLSTACKUP will become
-// sub / add which can clobber R1.
-let Defs = [R1], Uses = [R1] in {
-  def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i32imm:$amt),
-                                "#ADJCALLSTACKDOWN $amt",
-                                [(callseq_start timm:$amt)]>;
-  def ADJCALLSTACKUP : Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
-                              "#ADJCALLSTACKUP $amt1 $amt2",
-                              [(callseq_end timm:$amt1, timm:$amt2)]>;
-}
-
-let Uses = [SR_F], usesCustomInserter = 1, Predicates = [NoCmov] in {
-  def Select : Pseudo<(outs GPR:$dst), (ins GPR:$src, GPR:$src2),
-                       "# Select PSEUDO $dst $src $src2",
-                       [(set (i32 GPR:$dst),
-                        (OR1Kselectcc (i32 GPR:$src), (i32 GPR:$src2)))]>;
-
-  def Selectf32 : Pseudo<(outs GPR:$dst), (ins GPR:$src, GPR:$src2),
-                         "# Select PSEUDO $dst $src $src2",
-                         [(set (f32 GPR:$dst),
-                          (OR1Kselectcc (f32 GPR:$src), (f32 GPR:$src2)))]>;
-}
-
-
-let hasSideEffects = 0, Defs = [R9], Uses = [R9] in
-  def GET_GLOBAL_BASE : Pseudo<(outs GPR:$gp), (ins),
-                               "#GET_GLOBAL_BASE $gp", []>;
-
-class MOVHI_I <dag outs, dag ins, list<dag> pattern, InstrItinClass itin>
-  : InstOR1K<outs, ins,  "l.movhi\t$rD, $imm", pattern, itin> {
-  bits<16> imm;
-  bits<5> rD;
-  let optype = 0;
-  let opcode = 0x6;
-  let Inst{16} = 0;
-  let Inst{15-0} = imm;
-  let Inst{25-21} = rD;
-}
-
-let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
-  def MOVHI : MOVHI_I<(outs GPR:$rD), (ins i32imm:$imm),
-                      [(set GPR:$rD, i32hi16:$imm)], II_MOVHI>;
-}
-
-// ------------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 // EXTEND with sign/zero instructions
-// ------------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 class EXTEND<bits<4> op2Val, bits<4> op3Val, string asmstring, list<dag> pattern>
   : InstRR<0x8, (outs GPR:$rD), (ins GPR:$rA),
@@ -662,21 +600,19 @@ class EXTEND<bits<4> op2Val, bits<4> op3Val, string asmstring, list<dag> pattern
 }
 
 let Predicates=[HasExt] in {
-def EXT_BYTE_SIGN : EXTEND<0x1, 0xc, "l.extbs",
-                           [(set GPR:$rD, (sext_inreg GPR:$rA, i8))]>;
-def EXT_HALF_SIGN : EXTEND<0x0, 0xc, "l.exths",
-                           [(set GPR:$rD, (sext_inreg GPR:$rA, i16))]>;
-def EXT_WORD_SIGN : EXTEND<0x0, 0xd, "l.extws", []>;
+  def EXT_BYTE_SIGN : EXTEND<0x1, 0xc, "l.extbs",
+                             [(set GPR:$rD, (sext_inreg GPR:$rA, i8))]>;
+  def EXT_HALF_SIGN : EXTEND<0x0, 0xc, "l.exths",
+                             [(set GPR:$rD, (sext_inreg GPR:$rA, i16))]>;
+  def EXT_WORD_SIGN : EXTEND<0x0, 0xd, "l.extws", []>;
 
-def EXT_BYTE_ZERO : EXTEND<0x3, 0xc, "l.extbz", []>;
-def EXT_HALF_ZERO : EXTEND<0x2, 0xc, "l.exthz", []>;
-def EXT_WORD_ZERO : EXTEND<0x1, 0xd, "l.extwz", []>;
+  def EXT_BYTE_ZERO : EXTEND<0x3, 0xc, "l.extbz", []>;
+  def EXT_HALF_ZERO : EXTEND<0x2, 0xc, "l.exthz", []>;
+  def EXT_WORD_ZERO : EXTEND<0x1, 0xd, "l.extwz", []>;
 
-def : Pat<(and GPR:$rA, 255),
-          (EXT_BYTE_ZERO GPR:$rA)>;
+  def : Pat<(and GPR:$rA, 255), (EXT_BYTE_ZERO GPR:$rA)>;
 
-def : Pat<(and GPR:$rA, 65535),
-          (EXT_HALF_ZERO GPR:$rA)>;
+  def : Pat<(and GPR:$rA, 65535), (EXT_HALF_ZERO GPR:$rA)>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -689,12 +625,9 @@ class FixedOp<bits<32> op, string asmstr, list<dag> pattern>
 }
 
 let hasSideEffects = 1 in {
-  def CONTX_SYNC :
-    FixedOp<0x23000000, "l.csync", [(int_or1k_csync)]>;
-  def MEM_SYNC :
-    FixedOp<0x22000000, "l.msync", [(int_or1k_msync)]>;
-  def PIPE_SYNC :
-    FixedOp<0x22800000, "l.psync", [(int_or1k_psync)]>;
+  def CONTX_SYNC : FixedOp<0x23000000, "l.csync", [(int_or1k_csync)]>;
+  def MEM_SYNC : FixedOp<0x22000000, "l.msync", [(int_or1k_msync)]>;
+  def PIPE_SYNC : FixedOp<0x22800000, "l.psync", [(int_or1k_psync)]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -720,7 +653,6 @@ let hasSideEffects = 1 in {
 // MAC instructions
 //===----------------------------------------------------------------------===//
 
-let Predicates=[HasMAC] in {
 class MAC_RR<bits<4> subOp1, string asmstr, list<dag> pattern>
   : InstRR<0x1, (outs), (ins GPR:$rA, GPR:$rB),
            !strconcat(asmstr, "\t$rA, $rB"), pattern> {
@@ -733,12 +665,6 @@ class MAC_RR<bits<4> subOp1, string asmstr, list<dag> pattern>
   let Inst{3-0} = subOp1;
 }
 
-def MAC : MAC_RR<0x1, "l.mac", []>;
-def MSB : MAC_RR<0x2, "l.msb", []>;
-
-def MACU : MAC_RR<0x3, "l.macu", []>;
-def MSBU : MAC_RR<0x4, "l.msbu", []>;
-
 class MAC_RI<bits<4> subOp1, string asmstr, list<dag> pattern>
   : InstBR<0x3, (outs), (ins GPR:$rA, s16imm:$imm),
            !strconcat(asmstr, "\t$rA, $imm"), pattern> {
@@ -749,8 +675,6 @@ class MAC_RI<bits<4> subOp1, string asmstr, list<dag> pattern>
   let Inst{15-0} = imm;
 }
 
-def MACI : MAC_RI<0x1, "l.maci", []>;
-
 class MAC_R<string asmstr, list<dag> pattern>
   : InstBI<0x6, (outs GPR:$rD), (ins),  !strconcat(asmstr, "\t$rD"), pattern> {
   bits<5> rD;
@@ -760,7 +684,16 @@ class MAC_R<string asmstr, list<dag> pattern>
   let Inst{25-21} = rD;
 }
 
-def MACRC : MAC_R<"l.macrc", []>;
+let Predicates=[HasMAC] in {
+  def MAC : MAC_RR<0x1, "l.mac", []>;
+  def MSB : MAC_RR<0x2, "l.msb", []>;
+
+  def MACI : MAC_RI<0x1, "l.maci", []>;
+
+  def MACU : MAC_RR<0x3, "l.macu", []>;
+  def MSBU : MAC_RR<0x4, "l.msbu", []>;
+
+  def MACRC : MAC_R<"l.macrc", []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -801,6 +734,42 @@ let hasSideEffects = 1 in {
 }
 
 //===----------------------------------------------------------------------===//
+// Pseudo Instructions
+//===----------------------------------------------------------------------===//
+
+// ADJCALLSTACKDOWN/UP implicitly use/def R1 because they may be expanded into
+// a stack adjustment and the codegen must know that they may modify the stack
+// pointer before prolog-epilog rewriting occurs.
+// Pessimistically assume ADJCALLSTACKDOWN / ADJCALLSTACKUP will become
+// sub / add which can clobber R1.
+let Defs = [R1], Uses = [R1] in {
+  def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i32imm:$amt),
+                                "#ADJCALLSTACKDOWN $amt",
+                                [(callseq_start timm:$amt)]>;
+  def ADJCALLSTACKUP   : Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
+                                "#ADJCALLSTACKUP $amt1 $amt2",
+                                [(callseq_end timm:$amt1, timm:$amt2)]>;
+}
+
+let Uses = [SR_F], usesCustomInserter = 1, Predicates = [NoCmov] in {
+  def SELECT : Pseudo<(outs GPR:$dst), (ins GPR:$src, GPR:$src2),
+                      "#SELECT $dst, $src, $src2", []>;
+}
+
+let Predicates = [NoCmov] in {
+  def : Pat<(i32 (OR1KSelect (i32 GPR:$rA), (i32 GPR:$rB))),
+            (SELECT GPR:$rA, GPR:$rB)>;
+
+
+  def : Pat<(f32 (OR1KSelect (f32 GPR:$rA), (f32 GPR:$rB))),
+            (SELECT GPR:$rA, GPR:$rB)>;
+}
+
+let hasSideEffects = 0, neverHasSideEffects = 1, Defs = [R9], Uses = [R9] in
+  def GET_GLOBAL_BASE : Pseudo<(outs GPR:$gp), (ins),
+                               "#GLOBAL_BASE $gp", []>;
+
+//===----------------------------------------------------------------------===//
 // Non-Instruction Patterns
 //===----------------------------------------------------------------------===//
 
@@ -814,35 +783,22 @@ def : Pat<(i32 immZExt16:$imm), (ORI (i32 R0), imm:$imm)>;
 def : Pat<(i32 imm:$imm), (ORI (MOVHI (HI16 imm:$imm)), (LO16 imm:$imm))>;
 
 // Calls
-def : Pat<(call tglobaladdr:$dst), (JAL tglobaladdr:$dst)>;
-def : Pat<(call texternalsym:$dst), (JAL texternalsym:$dst)>;
+def : Pat<(OR1KCall tglobaladdr:$dst), (JAL tglobaladdr:$dst)>;
+def : Pat<(OR1KCall texternalsym:$dst), (JAL texternalsym:$dst)>;
 
 // Loads
 def : Pat<(extloadi8  ADDRri:$src), (i32 (LBZ ADDRri:$src))>;
 def : Pat<(extloadi16 ADDRri:$src), (i32 (LHZ ADDRri:$src))>;
 
-// GlobalAddress, ExternalSymbol, Jumptable, ConstantPool
-def : Pat<(OR1KHi tglobaladdr:$dst), (MOVHI tglobaladdr:$dst)>;
-def : Pat<(OR1KLo tglobaladdr:$dst), (ORI (i32 R0), tglobaladdr:$dst)>;
-def : Pat<(OR1KHi texternalsym:$dst), (MOVHI texternalsym:$dst)>;
-def : Pat<(OR1KLo texternalsym:$dst), (ORI (i32 R0), texternalsym:$dst)>;
-def : Pat<(OR1KHi tblockaddress:$dst), (MOVHI tblockaddress:$dst)>;
-def : Pat<(OR1KLo tblockaddress:$dst), (ORI (i32 R0), tblockaddress:$dst)>;
-def : Pat<(OR1KHi tjumptable:$dst), (MOVHI tjumptable:$dst)>;
-def : Pat<(OR1KLo tjumptable:$dst), (ORI (i32 R0), tjumptable:$dst)>;
-def : Pat<(OR1KHi tconstpool:$dst), (MOVHI tconstpool:$dst)>;
-def : Pat<(OR1KLo tconstpool:$dst), (ORI (i32 R0), tconstpool:$dst)>;
-
-def : Pat<(or GPR:$hi, (OR1KLo tglobaladdr:$lo)),
-          (ORI GPR:$hi, tglobaladdr:$lo)>;
-def : Pat<(or GPR:$hi, (OR1KLo texternalsym:$lo)),
-          (ORI GPR:$hi, texternalsym:$lo)>;
-def : Pat<(or GPR:$hi, (OR1KLo tblockaddress:$lo)),
-          (ORI GPR:$hi, tblockaddress:$lo)>;
-def : Pat<(or GPR:$hi, (OR1KLo tjumptable:$lo)),
-          (ORI GPR:$hi, tjumptable:$lo)>;
-def : Pat<(or GPR:$hi, (OR1KLo tconstpool:$lo)),
-          (ORI GPR:$hi, tconstpool:$lo)>;
+// GlobalAddress, ExternalSymbol, BlockAddress and Jumptable
+def : Pat<(OR1KHiLo tglobaladdr:$dst_hi, tglobaladdr:$dst_lo),
+          (ORI (MOVHI tglobaladdr:$dst_hi), tglobaladdr:$dst_lo)>;
+def : Pat<(OR1KHiLo texternalsym:$dst_hi, texternalsym:$dst_lo),
+          (ORI (MOVHI texternalsym:$dst_hi), texternalsym:$dst_lo)>;
+def : Pat<(OR1KHiLo tblockaddress:$dst_hi, tblockaddress:$dst_lo),
+          (ORI (MOVHI tblockaddress:$dst_hi), tblockaddress:$dst_lo)>;
+def : Pat<(OR1KHiLo tjumptable:$dst_hi, tjumptable:$dst_lo),
+          (ORI (MOVHI tjumptable:$dst_hi), tjumptable:$dst_lo)>;
 
 // We have R0 always set to zero!
 def : Pat<(i32 0), (i32 (COPY (i32 R0)))>;

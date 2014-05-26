@@ -58,10 +58,12 @@ def REMrrf32 : AluF<0x06, "lf.rem.s", frem, II_FREMS>;
 
 //===----------------------------------------------------------------------===//
 // fp->int and int->fp conversion
-//===----------------------------------------------------------------------===//
-class ConvF<bits<8> subOp, string asmstr, list<dag> pattern, InstrItinClass itin>
+//===------------------------------------------~.----------------------------===//
+class ConvF<bits<8> subOp, string asmstr, ValueType DestTy, ValueType SrcTy,
+            SDNode OpNode, InstrItinClass itin>
   : InstFRR<subOp, (outs GPR:$rD), (ins GPR:$rA),
-           !strconcat(asmstr, "\t$rD, $rA"), pattern, itin> {
+           !strconcat(asmstr, "\t$rD, $rA"),
+           [(set (DestTy GPR:$rD), (OpNode (SrcTy GPR:$rA)))], itin> {
   bits<5> rD;
   bits<5> rA;
 
@@ -70,19 +72,17 @@ class ConvF<bits<8> subOp, string asmstr, list<dag> pattern, InstrItinClass itin
   let Inst{15-11} = 0;
 }
 
-def ITOFf32 : ConvF<0x04, "lf.itof.s",
-                    [(set (f32 GPR:$rD), (sint_to_fp (i32 GPR:$rA)))], II_FITOFD>;
-def FTOIf32 : ConvF<0x05, "lf.ftoi.s",
-                    [(set (i32 GPR:$rD), (fp_to_sint (f32 GPR:$rA)))], II_FITOFS>;
+def ITOFf32 : ConvF<0x04, "lf.itof.s", f32, i32, sint_to_fp, II_FITOFD>;
+def FTOIf32 : ConvF<0x05, "lf.ftoi.s", i32, f32, fp_to_sint, II_FITOFS>;
 
 //===----------------------------------------------------------------------===//
 // Condition/SF instructions
 //===----------------------------------------------------------------------===//
 
-class SetFlagFRR<bits<8> subOp, string asmstr, PatLeaf Cond, InstrItinClass itin>
+class SetFlagFRR<bits<8> subOp, string asmstr, CondCode Cond, InstrItinClass itin>
   : InstFRR<subOp, (outs), (ins GPR:$rA, GPR:$rB),
            !strconcat(asmstr, "\t$rA, $rB"),
-           [(OR1Ksetflag (f32 GPR:$rA), (f32 GPR:$rB), Cond)], itin> {
+           [(OR1KSetFlag (f32 GPR:$rA), (f32 GPR:$rB), Cond)], itin> {
   bits<5> rA;
   bits<5> rB;
 
@@ -90,61 +90,28 @@ class SetFlagFRR<bits<8> subOp, string asmstr, PatLeaf Cond, InstrItinClass itin
   let Inst{15-11} = rB;
 }
 
-// FIXME: Do not use isCodeGenOnly = 1 to resolve conflicts
 let Defs = [SR_F] in {
-  def SFEQrrf32 : SetFlagFRR<0x08, "lf.sfeq.s", OR1K_CC_EQ, II_SET_FLAG_S>;
-  def SFNErrf32 : SetFlagFRR<0x09, "lf.sfne.s", OR1K_CC_NE, II_SET_FLAG_S>;
-  def SFGTrrf32 : SetFlagFRR<0x0a, "lf.sfgt.s", OR1K_CC_GT, II_SET_FLAG_S>;
-  def SFGErrf32 : SetFlagFRR<0x0b, "lf.sfge.s", OR1K_CC_GE, II_SET_FLAG_S>;
-  def SFLTrrf32 : SetFlagFRR<0x0c, "lf.sflt.s", OR1K_CC_LT, II_SET_FLAG_S>;
-  def SFLErrf32 : SetFlagFRR<0x0d, "lf.sfle.s", OR1K_CC_LE, II_SET_FLAG_S>;
-  let isCodeGenOnly = 1 in {
-    def SFEQOrrf32 : SetFlagFRR<0x08, "lf.sfeq.s", OR1K_CC_EQO, II_SET_FLAG_S>;
-    def SFNEOrrf32 : SetFlagFRR<0x09, "lf.sfne.s", OR1K_CC_NEO, II_SET_FLAG_S>;
-    def SFGTOrrf32 : SetFlagFRR<0x0a, "lf.sfgt.s", OR1K_CC_GTO, II_SET_FLAG_S>;
-    def SFGEOrrf32 : SetFlagFRR<0x0b, "lf.sfge.s", OR1K_CC_GEO, II_SET_FLAG_S>;
-    def SFLTOrrf32 : SetFlagFRR<0x0c, "lf.sflt.s", OR1K_CC_LTO, II_SET_FLAG_S>;
-    def SFLEOrrf32 : SetFlagFRR<0x0d, "lf.sfle.s", OR1K_CC_LEO, II_SET_FLAG_S>;
-  }
+  def SFEQrrf32 : SetFlagFRR<0x08, "lf.sfeq.s", SETOEQ, II_SET_FLAG_S>;
+  def SFNErrf32 : SetFlagFRR<0x09, "lf.sfne.s", SETUNE, II_SET_FLAG_S>;
+  def SFGTrrf32 : SetFlagFRR<0x0a, "lf.sfgt.s", SETOGT, II_SET_FLAG_S>;
+  def SFGErrf32 : SetFlagFRR<0x0b, "lf.sfge.s", SETOGE, II_SET_FLAG_S>;
+  def SFLTrrf32 : SetFlagFRR<0x0c, "lf.sflt.s", SETOLT, II_SET_FLAG_S>;
+  def SFLErrf32 : SetFlagFRR<0x0d, "lf.sfle.s", SETOLE, II_SET_FLAG_S>;
 }
 
-// FIXME: Do not use isCodeGenOnly = 1 to resolve conflicts
-let Uses = [SR_F], Predicates = [HasCmov], isCodeGenOnly = 1 in
-  def CMOVf32 : ALU_RR<0x0, 0xe, "l.cmov",
-           [(set GPR:$rD, (OR1Kselectcc (f32 GPR:$rA),(f32 GPR:$rB)))], II_CMOV>;
-
-//===----------------------------------------------------------------------===//
-// LOAD/STORE instructions
-//===----------------------------------------------------------------------===//
-
-class LOADf32<bits<4> subop, string asmstring, PatFrag opNode>
-  : LOAD<subop, asmstring, [(set (f32 GPR:$rD), (opNode ADDRri:$src))]>;
-
-class STOREf32<bits<4> subOp, string asmstring, PatFrag opNode>
-  : STORE<subOp, asmstring, [(opNode (f32 GPR:$rB), ADDRri:$dst)]>;
-
-// FIXME: Do not use isCodeGenOnly = 1 to resolve conflicts
-let isCodeGenOnly = 1 in {
-def LWZf32 : LOADf32<0x1, "l.lwz", load>;
-def SWf32 : STOREf32<0x5, "l.sw", store>;
-}
-
-//===----------------------------------------------------------------------===//
-// Non-fpu instructions with fp immediates
-//===----------------------------------------------------------------------===//
-
-// FIXME: Do not use isCodeGenOnly = 1 to resolve conflicts
-let isAsCheapAsAMove = 1, isCodeGenOnly = 1 in {
-  def MOVHIf32 : MOVHI_I<(outs GPR:$rD), (ins fimm:$imm),
-                         [(set GPR:$rD, f32hi16:$imm)], II_MOVHI>;
-  def ORIf32 : ALU_RI<0xa, (outs GPR:$rD), (ins GPR:$rA, fimm:$imm),
-                      "l.ori\t$rD, $rA, $imm", [], II_ALU>;
-}
+let Predicates = [HasCmov] in
+  def : Pat<(f32 (OR1KSelect (f32 GPR:$rA),(f32 GPR:$rB))),
+            (CMOV GPR:$rA, GPR:$rB)>;
 
 //===----------------------------------------------------------------------===//
 // Non-Instruction Patterns
 //===----------------------------------------------------------------------===//
 
-def : Pat<(f32 fpimm:$imm), (ORIf32 (MOVHIf32 (HI16f32 fpimm:$imm)),
-                            (LO16f32 fpimm:$imm))>;
-def : Pat<(f32 f32lo16:$imm), (ORIf32 (i32 R0), fpimm:$imm)>;
+def : Pat<(f32 fpimm:$imm), (ORI (MOVHI (HI16f32 fpimm:$imm)),
+                                        (LO16f32 fpimm:$imm))>;
+def : Pat<(f32 f32hi16:$imm), (MOVHI (HI16f32 f32hi16:$imm))>;
+def : Pat<(f32 f32lo16:$imm), (ORI (f32 R0), (LO16f32 f32lo16:$imm))>;
+
+def : Pat<(f32 (load ADDRri:$src)), (LWZ ADDRri:$src)>;
+
+def : Pat<(store (f32 GPR:$rB), ADDRri:$src), (SW GPR:$rB, ADDRri:$src)>;

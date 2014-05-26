@@ -1,4 +1,4 @@
-; RUN: llc -march=or1k < %s | FileCheck %s
+; RUN: llc -march=or1k -mattr=+compat-delay< %s | FileCheck %s
 
 declare void @vararg(i32, ...)
 define void @foo() {

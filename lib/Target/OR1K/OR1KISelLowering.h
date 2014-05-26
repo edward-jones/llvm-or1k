@@ -21,132 +21,99 @@
 #include "llvm/IR/DataLayout.h"
 
 namespace llvm {
-  namespace OR1KISD {
-    enum {
-      FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
-      /// Return with a flag operand. Operand 0 is the chain operand.
-      RET_FLAG,
+namespace OR1KISD {
+enum {
+  FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
-      /// CALL - These operations represent an abstract call instruction, which
-      /// includes a bunch of information.
-      CALL,
+  Return,
+  Call,
+  Select,
+  SetFlag,
+  BrCond,
+  FF1,
+  FL1,
+  HiLo
+};
+}
 
-      /// SELECT_CC - Operand 0 and operand 1 are selection variable, operand 3
-      /// is condition code and operand 4 is flag operand.
-      SELECT_CC,
+class OR1KSubtarget;
+class OR1KTargetMachine;
 
-      // SET_FLAG - Set flag compare
-      SET_FLAG,
+class OR1KTargetLowering : public TargetLowering {
+public:
+  explicit OR1KTargetLowering(OR1KTargetMachine &TM);
 
-      // BR_CC - Used to glue together a l.bf to a l.sfXX
-      BR_CC,
+  SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
+  const char *getTargetNodeName(unsigned Opcode) const override;
 
-      /// Wrapper - A wrapper node for TargetConstantPool, TargetExternalSymbol,
-      /// and TargetGlobalAddress.
-      Wrapper,
 
-      /// Find First 1 and Find Last 1 - used to implement CTTZ and CTLZ
-      FF1,
-      FL1,
+  SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
+                               bool isVarArg,
+                               const SmallVectorImpl<ISD::InputArg> &Ins,
+                               SDLoc dl, SelectionDAG &DAG,
+                               SmallVectorImpl<SDValue> &InVals) const override;
 
-      // Get the Higher/Lower 16 bits from a 32-bit immediate
-      HI,
-      LO,
+  SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
+                    SmallVectorImpl<SDValue> &InVals) const override;
 
-      // Global Pointer value
-      GLOBAL_BASE_REG
-    };
-  }
+  SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
+                          CallingConv::ID CallConv, bool isVarArg,
+                          const SmallVectorImpl<ISD::InputArg> &Ins,
+                          SDLoc dl, SelectionDAG &DAG,
+                          SmallVectorImpl<SDValue> &InVals) const;
 
-  class OR1KSubtarget;
-  class OR1KTargetMachine;
+  SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv,
+                      bool isVarArg,
+                      const SmallVectorImpl<ISD::OutputArg> &Outs,
+                      const SmallVectorImpl<SDValue> &OutVals,
+                      SDLoc dl, SelectionDAG &DAG) const override;
 
-  class OR1KTargetLowering : public TargetLowering {
-  public:
-    explicit OR1KTargetLowering(OR1KTargetMachine &TM);
+  std::pair<unsigned, const TargetRegisterClass*>
+  getRegForInlineAsmConstraint(const std::string &Constraint,
+                               MVT VT) const override;
+  ConstraintWeight
+  getSingleConstraintMatchWeight(AsmOperandInfo &info,
+                                 const char *constraint) const override;
 
-    /// LowerOperation - Provide custom lowering hooks for some operations.
-    virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const;
+  void LowerAsmOperandForConstraint(SDValue Op,
+                                    std::string &Constraint,
+                                    std::vector<SDValue> &Ops,
+                                    SelectionDAG &DAG) const override;
 
-    /// getTargetNodeName - This method returns the name of a target specific
-    /// DAG node.
-    virtual const char *getTargetNodeName(unsigned Opcode) const;
+  MachineBasicBlock *
+  EmitInstrWithCustomInserter(MachineInstr *MI,
+                              MachineBasicBlock *BB) const override;
 
-    SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerVACOPY(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerCTTZ(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerCTLZ(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerCTTZ_ZERO_UNDEF(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const;
+  bool isLegalAddImmediate(int64_t) const override;
+  bool isLegalICmpImmediate(int64_t) const override;
+  bool isLegalAddressingMode(const AddrMode& AM, Type* Ty) const override;
 
-    std::pair<unsigned, const TargetRegisterClass*>
-    getRegForInlineAsmConstraint(const std::string &Constraint, MVT VT) const;
-    ConstraintWeight
-    getSingleConstraintMatchWeight(AsmOperandInfo &info,
-                                   const char *constraint) const;
-    virtual void LowerAsmOperandForConstraint(SDValue Op,
-                                              std::string &Constraint,
-                                              std::vector<SDValue> &Ops,
-                                              SelectionDAG &DAG) const;
+private:
+  SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerVACOPY(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerCTTZ(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerCTLZ(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerCTTZ_ZERO_UNDEF(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const;
 
-    MachineBasicBlock* EmitInstrWithCustomInserter(MachineInstr *MI,
-                                                   MachineBasicBlock *BB) const;
+private:
+  SDValue getSetFlag(SDLoc dl, SDValue LHS, SDValue RHS, ISD::CondCode CC,
+                     bool &Negate, SelectionDAG &DAG) const;
 
-  private:
-    const OR1KSubtarget &Subtarget;
-    const OR1KTargetMachine &TM;
-    const DataLayout *DL;
+private:
+  const OR1KSubtarget &Subtarget;
+  const OR1KTargetMachine &TM;
+  const DataLayout *DL;
+};
 
-    SDValue LowerCCCCallTo(SDValue Chain, SDValue Callee,
-                           CallingConv::ID CallConv, bool isVarArg,
-                           bool isTailCall,
-                           const SmallVectorImpl<ISD::OutputArg> &Outs,
-                           const SmallVectorImpl<SDValue> &OutVals,
-                           const SmallVectorImpl<ISD::InputArg> &Ins,
-                           SDLoc dl, SelectionDAG &DAG,
-                           SmallVectorImpl<SDValue> &InVals) const;
+}
 
-    SDValue LowerCCCArguments(SDValue Chain,
-                              CallingConv::ID CallConv,
-                              bool isVarArg,
-                              const SmallVectorImpl<ISD::InputArg> &Ins,
-                              SDLoc dl,
-                              SelectionDAG &DAG,
-                              SmallVectorImpl<SDValue> &InVals) const;
-
-    SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
-                            CallingConv::ID CallConv, bool isVarArg,
-                            const SmallVectorImpl<ISD::InputArg> &Ins,
-                            SDLoc dl, SelectionDAG &DAG,
-                            SmallVectorImpl<SDValue> &InVals) const;
-
-    SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
-                      SmallVectorImpl<SDValue> &InVals) const;
-
-    SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
-                                 bool isVarArg,
-                                 const SmallVectorImpl<ISD::InputArg> &Ins,
-                                 SDLoc dl, SelectionDAG &DAG,
-                                 SmallVectorImpl<SDValue> &InVals) const;
-
-    SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv,
-                        bool isVarArg,
-                        const SmallVectorImpl<ISD::OutputArg> &Outs,
-                        const SmallVectorImpl<SDValue> &OutVals,
-                        SDLoc dl, SelectionDAG &DAG) const;
-
-    bool isLegalAddImmediate(int64_t) const override;
-    bool isLegalICmpImmediate(int64_t) const override;
-    bool isLegalAddressingMode(const AddrMode& AM, Type* Ty) const override;
-  };
-} // namespace llvm
-
-#endif // LLVM_TARGET_OPENRISC_ISELLOWERING_H
+#endif
