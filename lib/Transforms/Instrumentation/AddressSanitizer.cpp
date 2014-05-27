@@ -80,6 +80,7 @@ static const char *const kAsanUnregisterGlobalsName =
 static const char *const kAsanPoisonGlobalsName = "__asan_before_dynamic_init";
 static const char *const kAsanUnpoisonGlobalsName = "__asan_after_dynamic_init";
 static const char *const kAsanInitName = "__asan_init_v3";
+static const char *const kAsanCovModuleInitName = "__sanitizer_cov_module_init";
 static const char *const kAsanCovName = "__sanitizer_cov";
 static const char *const kAsanPtrCmp = "__sanitizer_ptr_cmp";
 static const char *const kAsanPtrSub = "__sanitizer_ptr_sub";
@@ -156,7 +157,7 @@ static cl::opt<int> ClInstrumentationWithCallsThreshold(
        cl::desc("If the function being instrumented contains more than "
                 "this number of memory accesses, use callbacks instead of "
                 "inline checks (-1 means never use callbacks)."),
-       cl::Hidden, cl::init(10000));
+       cl::Hidden, cl::init(7000));
 static cl::opt<std::string> ClMemoryAccessCallbackPrefix(
        "asan-memory-access-callback-prefix",
        cl::desc("Prefix for memory access callbacks"), cl::Hidden,
@@ -408,6 +409,7 @@ class AddressSanitizerModule : public ModulePass {
   Function *AsanUnpoisonGlobals;
   Function *AsanRegisterGlobals;
   Function *AsanUnregisterGlobals;
+  Function *AsanCovModuleInit;
 };
 
 // Stack poisoning does not play well with exception handling.
@@ -623,26 +625,31 @@ void AddressSanitizer::instrumentMemIntrinsic(MemIntrinsic *MI) {
 }
 
 // If I is an interesting memory access, return the PointerOperand
-// and set IsWrite. Otherwise return NULL.
-static Value *isInterestingMemoryAccess(Instruction *I, bool *IsWrite) {
+// and set IsWrite/Alignment. Otherwise return NULL.
+static Value *isInterestingMemoryAccess(Instruction *I, bool *IsWrite,
+                                        unsigned *Alignment) {
   if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
     if (!ClInstrumentReads) return nullptr;
     *IsWrite = false;
+    *Alignment = LI->getAlignment();
     return LI->getPointerOperand();
   }
   if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
     if (!ClInstrumentWrites) return nullptr;
     *IsWrite = true;
+    *Alignment = SI->getAlignment();
     return SI->getPointerOperand();
   }
   if (AtomicRMWInst *RMW = dyn_cast<AtomicRMWInst>(I)) {
     if (!ClInstrumentAtomics) return nullptr;
     *IsWrite = true;
+    *Alignment = 0;
     return RMW->getPointerOperand();
   }
   if (AtomicCmpXchgInst *XCHG = dyn_cast<AtomicCmpXchgInst>(I)) {
     if (!ClInstrumentAtomics) return nullptr;
     *IsWrite = true;
+    *Alignment = 0;
     return XCHG->getPointerOperand();
   }
   return nullptr;
@@ -692,7 +699,8 @@ AddressSanitizer::instrumentPointerComparisonOrSubtraction(Instruction *I) {
 
 void AddressSanitizer::instrumentMop(Instruction *I, bool UseCalls) {
   bool IsWrite = false;
-  Value *Addr = isInterestingMemoryAccess(I, &IsWrite);
+  unsigned Alignment = 0;
+  Value *Addr = isInterestingMemoryAccess(I, &IsWrite, &Alignment);
   assert(Addr);
   if (ClOpt && ClOptGlobals) {
     if (GlobalVariable *G = dyn_cast<GlobalVariable>(Addr)) {
@@ -727,11 +735,14 @@ void AddressSanitizer::instrumentMop(Instruction *I, bool UseCalls) {
   else
     NumInstrumentedReads++;
 
-  // Instrument a 1-, 2-, 4-, 8-, or 16- byte access with one check.
-  if (TypeSize == 8  || TypeSize == 16 ||
-      TypeSize == 32 || TypeSize == 64 || TypeSize == 128)
+  unsigned Granularity = 1 << Mapping.Scale;
+  // Instrument a 1-, 2-, 4-, 8-, or 16- byte access with one check
+  // if the data is properly aligned.
+  if ((TypeSize == 8 || TypeSize == 16 || TypeSize == 32 || TypeSize == 64 ||
+       TypeSize == 128) &&
+      (Alignment >= Granularity || Alignment == 0 || Alignment >= TypeSize / 8))
     return instrumentAddress(I, I, Addr, TypeSize, IsWrite, nullptr, UseCalls);
-  // Instrument unusual size (but still multiple of 8).
+  // Instrument unusual size or unusual alignment.
   // We can not do it with a single check, so we do 1-byte check for the first
   // and the last bytes. We call __asan_report_*_n(addr, real_size) to be able
   // to report the actual access size.
@@ -981,6 +992,10 @@ void AddressSanitizerModule::initializeCallbacks(Module &M) {
       kAsanUnregisterGlobalsName,
       IRB.getVoidTy(), IntptrTy, IntptrTy, NULL));
   AsanUnregisterGlobals->setLinkage(Function::ExternalLinkage);
+  AsanCovModuleInit = checkInterfaceFunction(M.getOrInsertFunction(
+      kAsanCovModuleInitName,
+      IRB.getVoidTy(), IntptrTy, NULL));
+  AsanCovModuleInit->setLinkage(Function::ExternalLinkage);
 }
 
 // This function replaces all global variables with new variables that have
@@ -1011,6 +1026,14 @@ bool AddressSanitizerModule::runOnModule(Module &M) {
       GlobalsToChange.push_back(G);
   }
 
+  Function *CtorFunc = M.getFunction(kAsanModuleCtorName);
+  assert(CtorFunc);
+  IRBuilder<> IRB(CtorFunc->getEntryBlock().getTerminator());
+
+  Function *CovFunc = M.getFunction(kAsanCovName);
+  int nCov = CovFunc ? CovFunc->getNumUses() : 0;
+  IRB.CreateCall(AsanCovModuleInit, ConstantInt::get(IntptrTy, nCov));
+
   size_t n = GlobalsToChange.size();
   if (n == 0) return false;
 
@@ -1026,10 +1049,6 @@ bool AddressSanitizerModule::runOnModule(Module &M) {
                                                IntptrTy, IntptrTy,
                                                IntptrTy, IntptrTy, NULL);
   SmallVector<Constant *, 16> Initializers(n);
-
-  Function *CtorFunc = M.getFunction(kAsanModuleCtorName);
-  assert(CtorFunc);
-  IRBuilder<> IRB(CtorFunc->getEntryBlock().getTerminator());
 
   bool HasDynamicallyInitializedGlobals = false;
 
@@ -1328,6 +1347,7 @@ bool AddressSanitizer::runOnFunction(Function &F) {
   SmallVector<Instruction*, 16> PointerComparisonsOrSubtracts;
   int NumAllocas = 0;
   bool IsWrite;
+  unsigned Alignment;
 
   // Fill the set of memory operations to instrument.
   for (Function::iterator FI = F.begin(), FE = F.end();
@@ -1338,7 +1358,7 @@ bool AddressSanitizer::runOnFunction(Function &F) {
     for (BasicBlock::iterator BI = FI->begin(), BE = FI->end();
          BI != BE; ++BI) {
       if (LooksLikeCodeInBug11395(BI)) return false;
-      if (Value *Addr = isInterestingMemoryAccess(BI, &IsWrite)) {
+      if (Value *Addr = isInterestingMemoryAccess(BI, &IsWrite, &Alignment)) {
         if (ClOpt && ClOptSameTemp) {
           if (!TempsToInstrument.insert(Addr))
             continue;  // We've seen this temp in the current BB.
@@ -1390,7 +1410,7 @@ bool AddressSanitizer::runOnFunction(Function &F) {
     Instruction *Inst = ToInstrument[i];
     if (ClDebugMin < 0 || ClDebugMax < 0 ||
         (NumInstrumented >= ClDebugMin && NumInstrumented <= ClDebugMax)) {
-      if (isInterestingMemoryAccess(Inst, &IsWrite))
+      if (isInterestingMemoryAccess(Inst, &IsWrite, &Alignment))
         instrumentMop(Inst, UseCalls);
       else
         instrumentMemIntrinsic(cast<MemIntrinsic>(Inst));

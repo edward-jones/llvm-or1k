@@ -1137,7 +1137,7 @@ SDValue PPC::get_VSPLTI_elt(SDNode *N, unsigned ByteSize, SelectionDAG &DAG) {
 /// sign extension from a 16-bit value.  If so, this returns true and the
 /// immediate.
 static bool isIntS16Immediate(SDNode *N, short &Imm) {
-  if (N->getOpcode() != ISD::Constant)
+  if (!isa<ConstantSDNode>(N))
     return false;
 
   Imm = (short)cast<ConstantSDNode>(N)->getZExtValue();
@@ -5531,10 +5531,14 @@ SDValue PPCTargetLowering::LowerBUILD_VECTOR(SDValue Op,
     // we convert to a pseudo that will be expanded later into one of
     // the above forms.
     SDValue Elt = DAG.getConstant(SextVal, MVT::i32);
-    EVT VT = Op.getValueType();
-    int Size = VT == MVT::v16i8 ? 1 : (VT == MVT::v8i16 ? 2 : 4);
-    SDValue EltSize = DAG.getConstant(Size, MVT::i32);
-    return DAG.getNode(PPCISD::VADD_SPLAT, dl, VT, Elt, EltSize);
+    EVT VT = (SplatSize == 1 ? MVT::v16i8 :
+              (SplatSize == 2 ? MVT::v8i16 : MVT::v4i32));
+    SDValue EltSize = DAG.getConstant(SplatSize, MVT::i32);
+    SDValue RetVal = DAG.getNode(PPCISD::VADD_SPLAT, dl, VT, Elt, EltSize);
+    if (VT == Op.getValueType())
+      return RetVal;
+    else
+      return DAG.getNode(ISD::BITCAST, dl, Op.getValueType(), RetVal);
   }
 
   // If this is 0x8000_0000 x 4, turn into vspltisw + vslw.  If it is
