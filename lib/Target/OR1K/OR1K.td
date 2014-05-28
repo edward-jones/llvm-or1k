@@ -6,8 +6,7 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
-//
+// This is the top level entry point for the OR1K target.
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
@@ -34,34 +33,34 @@ def OR1KInstrInfo : InstrInfo;
 //===----------------------------------------------------------------------===//
 // OR1K subtarget features
 //===----------------------------------------------------------------------===//
-def FeatureMul   : SubtargetFeature<"mul", "HasMul", "true",
-                                   "Enable hardware multiplier">;
+def FeatureMul : SubtargetFeature<"mul", "HasMul", "true",
+                                  "Enable hardware multiplier">;
 def FeatureMul64 : SubtargetFeature<"mul64", "HasMul64", "true",
-                                   "Enable 64-bit hardware multiplier">;
-def FeatureDiv   : SubtargetFeature<"div", "HasDiv", "true",
-                                   "Enable hardware divider">;
-def FeatureRor   : SubtargetFeature<"ror", "HasRor", "true",
-                                   "Enable hardware rotate right">;
-def FeatureCmov  : SubtargetFeature<"cmov", "HasCmov", "true",
-                                    "Enable conditional move instruction">;
-def FeatureMAC   : SubtargetFeature<"mac", "HasMAC", "true",
-                                    "Enable MAC instructions">;
-def FeatureExt   : SubtargetFeature<"ext", "HasExt", "true",
-                                    "Enable sign/zero extend instructions">;
-def FeatureSFII  : SubtargetFeature<"sfii", "HasSFII", "true",
-                                    "Enable set flag if instructions with immediate">;
-def FeatureFBit  : SubtargetFeature<"fbit", "HasFBit", "true",
-                                    "Enable find first/last bit set instructions">;
+                                    "Enable 64-bit hardware multiplier">;
+def FeatureDiv : SubtargetFeature<"div", "HasDiv", "true",
+                                  "Enable hardware divider">;
+def FeatureRor : SubtargetFeature<"ror", "HasRor", "true",
+                                  "Enable hardware rotate right">;
+def FeatureCmov : SubtargetFeature<"cmov", "HasCmov", "true",
+                                   "Enable conditional move">;
+def FeatureMAC : SubtargetFeature<"mac", "HasMAC", "true",
+                                  "Enable MAC instructions">;
+def FeatureExt : SubtargetFeature<"ext", "HasExt", "true",
+                                  "Enable sign/zero extend instructions">;
+def FeatureSFII : SubtargetFeature<"sfii", "HasSFII", "true",
+                                   "Enable set flag if with immediate">;
+def FeatureFBit : SubtargetFeature<"fbit", "HasFBit", "true",
+                                   "Enable find first/last bit instructions">;
 
 def FeatureNoDelay : SubtargetFeature<"no-delay", "DelaySlotType",
-                                    "DelayType::NoDelay",
-                                    "Disable delay slots">;
+                                      "DelayType::NoDelay",
+                                      "Disable delay slots">;
 def FeatureCompatDelay : SubtargetFeature<"compat-delay", "DelaySlotType",
-                                    "DelayType::CompatDelay",
-                                    "Enable compat delay slot">;
+                                          "DelayType::CompatDelay",
+                                          "Enable compat delay slot">;
 
-def NewABI       : SubtargetFeature<"abi-new", "OR1KABI", "NewABI",
-                                    "Enable the NewABI">;
+def NewABI : SubtargetFeature<"abi-new", "OR1KABI", "NewABI",
+                              "Enable the NewABI">;
 
 //===----------------------------------------------------------------------===//
 // OR1K processors supported.
