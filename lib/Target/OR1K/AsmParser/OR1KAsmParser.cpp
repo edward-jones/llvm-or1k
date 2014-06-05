@@ -561,5 +561,6 @@ bool OR1KAsmParser::ParseDirective(AsmToken DirectiveID) {
 }
 
 extern "C" void LLVMInitializeOR1KAsmParser() {
-  RegisterMCAsmParser<OR1KAsmParser> X(TheOR1KTarget);
+  RegisterMCAsmParser<OR1KAsmParser> X(TheOR1KbeTarget);
+  RegisterMCAsmParser<OR1KAsmParser> Y(TheOR1KleTarget);
 }

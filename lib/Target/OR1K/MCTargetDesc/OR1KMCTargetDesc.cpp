@@ -89,34 +89,44 @@ static MCInstPrinter *createOR1KMCInstPrinter(const Target &T,
 
 extern "C" void LLVMInitializeOR1KTargetMC() {
   // Register the MC asm info.
-  RegisterMCAsmInfo<OR1KMCAsmInfo> X(TheOR1KTarget);
+  RegisterMCAsmInfo<OR1KMCAsmInfo> X(TheOR1KbeTarget);
+  RegisterMCAsmInfo<OR1KMCAsmInfo> Y(TheOR1KleTarget);
+
+  typedef TargetRegistry TR;
 
   // Register the MC codegen info.
-  TargetRegistry::RegisterMCCodeGenInfo(TheOR1KTarget, createOR1KMCCodeGenInfo);
+  TR::RegisterMCCodeGenInfo(TheOR1KbeTarget, createOR1KMCCodeGenInfo);
+  TR::RegisterMCCodeGenInfo(TheOR1KleTarget, createOR1KMCCodeGenInfo);
 
   // Register the MC instruction info.
-  TargetRegistry::RegisterMCInstrInfo(TheOR1KTarget, createOR1KMCInstrInfo);
+  TR::RegisterMCInstrInfo(TheOR1KbeTarget, createOR1KMCInstrInfo);
+  TR::RegisterMCInstrInfo(TheOR1KleTarget, createOR1KMCInstrInfo);
 
   // Register the MC register info.
-  TargetRegistry::RegisterMCRegInfo(TheOR1KTarget, createOR1KMCRegisterInfo);
+  TR::RegisterMCRegInfo(TheOR1KbeTarget, createOR1KMCRegisterInfo);
+  TR::RegisterMCRegInfo(TheOR1KleTarget, createOR1KMCRegisterInfo);
 
   // Register the MC subtarget info.
-  TargetRegistry::RegisterMCSubtargetInfo(TheOR1KTarget,
-                                          createOR1KMCSubtargetInfo);
+  TR::RegisterMCSubtargetInfo(TheOR1KbeTarget, createOR1KMCSubtargetInfo);
+  TR::RegisterMCSubtargetInfo(TheOR1KleTarget, createOR1KMCSubtargetInfo);
 
   // Register the MC code emitter.
-  TargetRegistry::RegisterMCCodeEmitter(TheOR1KTarget,
-                                        llvm::createOR1KMCCodeEmitter);
+  TR::RegisterMCCodeEmitter(TheOR1KbeTarget, llvm::createOR1KbeMCCodeEmitter);
+  TR::RegisterMCCodeEmitter(TheOR1KleTarget, llvm::createOR1KleMCCodeEmitter);
 
   // Register the ASM Backend.
-  TargetRegistry::RegisterMCAsmBackend(TheOR1KTarget, createOR1KAsmBackend);
+  TR::RegisterMCAsmBackend(TheOR1KbeTarget, createOR1KbeAsmBackend);
+  TR::RegisterMCAsmBackend(TheOR1KleTarget, createOR1KleAsmBackend);
 
   // Register the asm streamer.
-  TargetRegistry::RegisterAsmStreamer(TheOR1KTarget, createOR1KMCAsmStreamer);
+  TR::RegisterAsmStreamer(TheOR1KbeTarget, createOR1KMCAsmStreamer);
+  TR::RegisterAsmStreamer(TheOR1KleTarget, createOR1KMCAsmStreamer);
 
   // Register the object streamer.
-  TargetRegistry::RegisterMCObjectStreamer(TheOR1KTarget, createOR1KMCStreamer);
+  TR::RegisterMCObjectStreamer(TheOR1KbeTarget, createOR1KMCStreamer);
+  TR::RegisterMCObjectStreamer(TheOR1KleTarget, createOR1KMCStreamer);
 
   // Register the MCInstPrinter.
-  TargetRegistry::RegisterMCInstPrinter(TheOR1KTarget, createOR1KMCInstPrinter);
+  TR::RegisterMCInstPrinter(TheOR1KbeTarget, createOR1KMCInstPrinter);
+  TR::RegisterMCInstPrinter(TheOR1KleTarget, createOR1KMCInstPrinter);
 }

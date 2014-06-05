@@ -926,6 +926,10 @@ unsigned ELFObjectFile<ELFT>::getArch() const {
   case ELF::EM_SPARCV9:
     return Triple::sparcv9;
 
+  case ELF::EM_OPENRISC:
+    return (ELFT::TargetEndianness == support::little) ? Triple::or1kle
+                                                       : Triple::or1k;
+
   default:
     return Triple::UnknownArch;
   }

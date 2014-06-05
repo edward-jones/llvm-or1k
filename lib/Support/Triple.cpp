@@ -51,6 +51,7 @@ const char *Triple::getArchTypeName(ArchType Kind) {
   case spir:        return "spir";
   case spir64:      return "spir64";
   case or1k:        return "or1k";
+  case or1kle:      return "or1kle";
   }
 
   llvm_unreachable("Invalid ArchType!");
@@ -102,7 +103,9 @@ const char *Triple::getArchTypePrefix(ArchType Kind) {
   case amdil:       return "amdil";
   case spir:        return "spir";
   case spir64:      return "spir";
-  case or1k:        return "or1k";
+
+  case or1k:
+  case or1kle:      return "or1k";
   }
 }
 
@@ -210,6 +213,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("spir", spir)
     .Case("spir64", spir64)
     .Case("or1k", or1k)
+    .Case("or1k", or1kle)
     .Default(UnknownArch);
 }
 
@@ -284,6 +288,7 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("spir", Triple::spir)
     .Case("spir64", Triple::spir64)
     .Case("or1k", Triple::or1k)
+    .Case("or1kle", Triple::or1kle)
     .Default(Triple::UnknownArch);
 }
 
@@ -795,6 +800,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::mipsel:
   case llvm::Triple::nvptx:
   case llvm::Triple::or1k:
+  case llvm::Triple::or1kle:
   case llvm::Triple::ppc:
   case llvm::Triple::r600:
   case llvm::Triple::sparc:
@@ -860,6 +866,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::mipsel:
   case Triple::nvptx:
   case Triple::or1k:
+  case Triple::or1kle:
   case Triple::ppc:
   case Triple::r600:
   case Triple::sparc:
@@ -893,6 +900,7 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::le32:
   case Triple::msp430:
   case Triple::or1k:
+  case Triple::or1kle:
   case Triple::r600:
   case Triple::tce:
   case Triple::thumb:

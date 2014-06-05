@@ -37,11 +37,12 @@ class OR1KMCCodeEmitter : public MCCodeEmitter {
   const MCInstrInfo &MCII;
   const MCSubtargetInfo &STI;
   MCContext &Ctx;
+  bool IsLittleEndian;
 
 public:
   OR1KMCCodeEmitter(const MCInstrInfo &mcii, const MCSubtargetInfo &sti,
-                    MCContext &ctx)
-    : MCII(mcii), STI(sti), Ctx(ctx) {
+                    MCContext &ctx, bool IsLittleEndian)
+    : MCII(mcii), STI(sti), Ctx(ctx), IsLittleEndian(IsLittleEndian) {
     }
 
   ~OR1KMCCodeEmitter() {}
@@ -94,11 +95,18 @@ public:
 };
 } // end anonymous namepsace
 
-MCCodeEmitter *llvm::createOR1KMCCodeEmitter(const MCInstrInfo &MCII,
-                                             const MCRegisterInfo &MRI,
-                                             const MCSubtargetInfo &STI,
-                                             MCContext &Ctx) {
-  return new OR1KMCCodeEmitter(MCII, STI, Ctx);
+MCCodeEmitter *llvm::createOR1KbeMCCodeEmitter(const MCInstrInfo &MCII,
+                                               const MCRegisterInfo &MRI,
+                                               const MCSubtargetInfo &STI,
+                                               MCContext &Ctx) {
+  return new OR1KMCCodeEmitter(MCII, STI, Ctx, false);
+}
+
+MCCodeEmitter *llvm::createOR1KleMCCodeEmitter(const MCInstrInfo &MCII,
+                                               const MCRegisterInfo &MRI,
+                                               const MCSubtargetInfo &STI,
+                                               MCContext &Ctx) {
+  return new OR1KMCCodeEmitter(MCII, STI, Ctx, true);
 }
 
 static OR1K::Fixups getFixupKind(OR1KMCExpr::VariantKind VK) {
@@ -149,8 +157,9 @@ EncodeInstruction(const MCInst &Inst, raw_ostream &OS,
 
   // Get instruction encoding and emit it
   ++MCNumEmitted;       // Keep track of the number of emitted insns.
-  unsigned Value = getBinaryCodeForInstr(Inst, Fixups, STI);
-  EmitBEConstant(Value, 4, CurByte, OS);
+  unsigned Val = getBinaryCodeForInstr(Inst, Fixups, STI);
+  IsLittleEndian ?
+    EmitLEConstant(Val, 4, CurByte, OS) : EmitBEConstant(Val, 4, CurByte, OS);
 }
 
 // Encode OR1K Memory Operand

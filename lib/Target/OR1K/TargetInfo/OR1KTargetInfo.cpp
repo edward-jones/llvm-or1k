@@ -12,8 +12,10 @@
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
-Target llvm::TheOR1KTarget;
+Target llvm::TheOR1KbeTarget;
+Target llvm::TheOR1KleTarget;
 
 extern "C" void LLVMInitializeOR1KTargetInfo() { 
-  RegisterTarget<Triple::or1k> X(TheOR1KTarget, "or1k", "OR1K");
+  RegisterTarget<Triple::or1k> X(TheOR1KbeTarget, "or1k", "OR1K");
+  RegisterTarget<Triple::or1kle> Y(TheOR1KleTarget, "or1kle", "OR1KLE");
 }
