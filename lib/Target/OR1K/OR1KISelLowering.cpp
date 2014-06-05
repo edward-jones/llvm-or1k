@@ -865,12 +865,14 @@ SDValue OR1KTargetLowering::LowerRETURNADDR(SDValue Op,
   MachineFrameInfo *MFI = MF.getFrameInfo();
   MFI->setReturnAddressIsTaken(true);
 
+  const int64_t ReturnAddrFPOffset = -4;
+
   EVT VT = Op.getValueType();
   SDLoc dl(Op);
   unsigned Depth = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
   if (Depth) {
     SDValue FrameAddr = LowerFRAMEADDR(Op, DAG);
-    SDValue Offset = DAG.getConstant(DL->getPointerSize(), MVT::i32);
+    SDValue Offset = DAG.getConstant(ReturnAddrFPOffset, MVT::i32);
     return DAG.getLoad(VT, dl, DAG.getEntryNode(),
                        DAG.getNode(ISD::ADD, dl, VT, FrameAddr, Offset),
                        MachinePointerInfo(), false, false, false, 0);
@@ -887,12 +889,16 @@ SDValue OR1KTargetLowering::LowerFRAMEADDR(SDValue Op,
   MachineFrameInfo *MFI = DAG.getMachineFunction().getFrameInfo();
   MFI->setFrameAddressIsTaken(true);
 
+  const int64_t FrameAddrFPOffset = -8;
+
   EVT VT = Op.getValueType();
   SDLoc dl(Op);
   unsigned Depth = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
   SDValue FrameAddr = DAG.getCopyFromReg(DAG.getEntryNode(), dl, OR1K::R2, VT);
+  SDValue Offset = DAG.getConstant(FrameAddrFPOffset, MVT::i32);
   while (Depth--)
-    FrameAddr = DAG.getLoad(VT, dl, DAG.getEntryNode(), FrameAddr,
+    FrameAddr = DAG.getLoad(VT, dl, DAG.getEntryNode(),
+                            DAG.getNode(ISD::ADD, dl, VT, FrameAddr, Offset),
                             MachinePointerInfo(), false, false, false, 0);
   return FrameAddr;
 }
