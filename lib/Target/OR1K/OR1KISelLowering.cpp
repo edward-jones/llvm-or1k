@@ -291,11 +291,12 @@ static SDValue HandleVarArgs_NewABI(SDValue Chain, OR1KCCState &CCInfo,
 
   unsigned RegSize = OR1K::GPRRegClass.getSize();
   unsigned RegSaveAreaSize = RegSize * (NumRegs - FirstUnalloc);
+  int64_t RegSaveAreaOffset = -(int64_t)RegSaveAreaSize;
 
   FuncInfo->setRegSaveAreaSize(RegSaveAreaSize);
   VAInfo.AllocatedGPR = RegSize * FirstUnalloc;
 
-  int FI = MFI->CreateFixedObject(RegSaveAreaSize, -RegSaveAreaSize, true);
+  int FI = MFI->CreateFixedObject(RegSaveAreaSize, RegSaveAreaOffset, true);
   SDValue Base = DAG.getFrameIndex(FI, MVT::i32);
   VAInfo.RegSaveAreaFI = FI;
 
@@ -392,7 +393,7 @@ LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
     FuncInfo->setVariadic(true);
 
     OR1KMachineFunctionInfo::VarArgsInfo &VAInfo = FuncInfo->getVarArgsInfo();
-    int VarArgsOffset = CCInfo.getNextStackOffset();
+    int64_t VarArgsOffset = CCInfo.getNextStackOffset();
     VAInfo.VarArgsAreaFI = MFI->CreateFixedObject(1, VarArgsOffset, true);
   }
 
