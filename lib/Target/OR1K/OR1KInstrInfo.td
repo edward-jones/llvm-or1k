@@ -646,7 +646,7 @@ class InstOS<bits<16> op, string asmstring, list<dag> pattern>
 let hasSideEffects = 1 in {
   def SYS : InstOS<0x2000, "l.sys", [(int_or1k_sys immZExt16:$imm)]>;
   def TRAP : InstOS<0x2100, "l.trap", [(int_or1k_trap immZExt16:$imm)]>;
-  def RFE : FixedOp<0x90000000, "l.rfe", [(int_or1k_rfe)]>;
+  def RFE : FixedOp<0x24000000, "l.rfe", [(int_or1k_rfe)]>;
 }
 
 //===----------------------------------------------------------------------===//

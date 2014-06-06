@@ -443,7 +443,7 @@ styles:
 A symbol with ``internal`` or ``private`` linkage must have ``default``
 visibility.
 
-.. _namedtypes:
+.. _dllstorageclass:
 
 DLL Storage Classes
 -------------------
@@ -463,6 +463,8 @@ DLL storage class:
     ``__imp_`` and the function or variable name. Since this storage class
     exists for defining a dll interface, the compiler, assembler and linker know
     it is externally referenced and must refrain from deleting the symbol.
+
+.. _namedtypes:
 
 Structure Types
 ---------------
@@ -2785,15 +2787,29 @@ for optimizations are prefixed with ``llvm.mem``.
 '``llvm.mem.parallel_loop_access``' Metadata
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For a loop to be parallel, in addition to using
-the ``llvm.loop`` metadata to mark the loop latch branch instruction,
-also all of the memory accessing instructions in the loop body need to be
-marked with the ``llvm.mem.parallel_loop_access`` metadata. If there
-is at least one memory accessing instruction not marked with the metadata,
-the loop must be considered a sequential loop. This causes parallel loops to be
-converted to sequential loops due to optimization passes that are unaware of
-the parallel semantics and that insert new memory instructions to the loop
-body.
+The ``llvm.mem.parallel_loop_access`` metadata refers to a loop identifier, 
+or metadata containing a list of loop identifiers for nested loops. 
+The metadata is attached to memory accessing instructions and denotes that 
+no loop carried memory dependence exist between it and other instructions denoted 
+with the same loop identifier.
+
+Precisely, given two instructions ``m1`` and ``m2`` that both have the 
+``llvm.mem.parallel_loop_access`` metadata, with ``L1`` and ``L2`` being the 
+set of loops associated with that metadata, respectively, then there is no loop 
+carried dependence between ``m1`` and ``m2`` for loops ``L1`` or 
+``L2``.
+
+As a special case, if all memory accessing instructions in a loop have 
+``llvm.mem.parallel_loop_access`` metadata that refers to that loop, then the 
+loop has no loop carried memory dependences and is considered to be a parallel 
+loop.  
+
+Note that if not all memory access instructions have such metadata referring to 
+the loop, then the loop is considered not being trivially parallel. Additional 
+memory dependence analysis is required to make that determination.  As a fail 
+safe mechanism, this causes loops that were originally parallel to be considered 
+sequential (if optimization passes that are unaware of the parallel semantics 
+insert new memory instructions into the loop body).
 
 Example of a loop that is considered parallel due to its correct use of
 both ``llvm.loop`` and ``llvm.mem.parallel_loop_access``
@@ -6863,7 +6879,7 @@ register in surrounding code, including inline assembly. Because of that,
 allocatable registers are not supported.
 
 Warning: So far it only works with the stack pointer on selected
-architectures (ARM, ARM64, AArch64, PowerPC and x86_64). Significant amount of
+architectures (ARM, AArch64, PowerPC and x86_64). Significant amount of
 work is needed to support other registers and even more so, allocatable
 registers.
 
