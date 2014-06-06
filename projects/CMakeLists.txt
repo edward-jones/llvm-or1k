@@ -40,7 +40,9 @@ if(${LLVM_BUILD_RUNTIME})
                  -DCMAKE_SYSTEM_NAME=Generic
       STEP_TARGETS configure build install
       )
-    set(CRUNTIME_INSTALL_PATH /lib${LLVM_LIBDIR_SUFFIX}/clang/${CLANG_VERSION}/)
+    # FIXME: Here the clang version is hardcoded, we should move this in
+    # tools/clang/runtime or make the install prefix independent from clang
+    set(CRUNTIME_INSTALL_PATH /lib${LLVM_LIBDIR_SUFFIX}/clang/3.5.0/)
     install(DIRECTORY ${CRUNTIME_INSTALL_PREFIX}/
       DESTINATION ${CMAKE_INSTALL_PREFIX}${CRUNTIME_INSTALL_PATH})
 
