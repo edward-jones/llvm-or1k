@@ -457,17 +457,17 @@ class BRANCH<bits<4> op, string asmstring,
              list<dag> pattern, InstrItinClass itin>
   : InstBI<op, (outs), (ins brtarget:$dst),
            !strconcat(asmstring, "\t$dst"), pattern, itin> {
-  bits<26> dst;
+  bits<28> dst;
 
-  let Inst{25-0} = dst;
+  let Inst{25-0} = dst{27-2};
 }
 
 class BRANCHL<bits<4> op, string asmstring,  InstrItinClass itin>
   : InstBI<op, (outs), (ins calltarget:$dst),
            !strconcat(asmstring, "\t$dst"), [], itin> {
-  bits<26> dst;
+  bits<28> dst;
 
-  let Inst{25-0} = dst;
+  let Inst{25-0} = dst{27-2};
 }
 
 class BRANCH_R<bits<4> op, string asmstring,

@@ -73,7 +73,7 @@ def OR1KSchedMachineModel : SchedMachineModel {
 }
 
 def : ProcessorModel<"generic", OR1KSchedMachineModel,
-                     []>;
+                     [FeatureCompatDelay]>;
 def : ProcessorModel<"or1200", OR1KSchedMachineModel,
                      [FeatureMul, FeatureRor, FeatureExt, FeatureSFII]>;
 def : ProcessorModel<"pulp", OR1KSchedMachineModel,
