@@ -117,8 +117,10 @@ void OR1KAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
   Value &= (uint64_t(1) << NumBits) - 1;
 
   // Write out the fixed up bytes back to the code/data bits.
-  for (unsigned i = 0; i != NumBytes; ++i)
-    Data[Offset + i] |= (uint8_t)(Value >> ((InstrSizeInBytes - i - 1) * 8));
+  for (unsigned i = 0; i != NumBytes; ++i) {
+    unsigned ShAmtByte = IsLittleEndian ? i : (InstrSizeInBytes - i - 1);
+    Data[Offset + i] |= (uint8_t)(Value >> (ShAmtByte * 8));
+  }
 }
 
 MCObjectWriter *OR1KAsmBackend::createObjectWriter(raw_ostream &OS) const {
