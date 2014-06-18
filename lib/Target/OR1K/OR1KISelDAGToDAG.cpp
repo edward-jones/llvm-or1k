@@ -97,7 +97,10 @@ SDNode* OR1KDAGToDAGISel::Select(SDNode *Node) {
   case ISD::UMUL_LOHI:
   case ISD::SMUL_LOHI: return SelectMulHiLo(Node);
   case ISD::INTRINSIC_VOID:
-  case ISD::INTRINSIC_W_CHAIN: return SelectINTRINSIC_CHAIN(Node);
+  case ISD::INTRINSIC_W_CHAIN:
+    if (SDNode *ResNode = SelectINTRINSIC_CHAIN(Node))
+      return ResNode;
+    break;
   }
 
   // Select the default instruction

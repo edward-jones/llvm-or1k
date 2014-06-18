@@ -28,20 +28,27 @@ class Target;
 class StringRef;
 class raw_ostream;
 
-extern Target TheOR1KTarget;
+extern Target TheOR1KbeTarget;
+extern Target TheOR1KleTarget;
 
-MCCodeEmitter *createOR1KMCCodeEmitter(const MCInstrInfo &MCII,
-                                       const MCRegisterInfo &MRI,
-                                       const MCSubtargetInfo &STI,
-                                       MCContext &Ctx);
+MCCodeEmitter *createOR1KbeMCCodeEmitter(const MCInstrInfo &MCII,
+                                         const MCRegisterInfo &MRI,
+                                         const MCSubtargetInfo &STI,
+                                         MCContext &Ctx);
 
-MCAsmBackend *createOR1KAsmBackend(const Target &T,
-                                   const MCRegisterInfo &MRI,
-                                   StringRef TT,
-                                   StringRef CPU);
+MCCodeEmitter *createOR1KleMCCodeEmitter(const MCInstrInfo &MCII,
+                                         const MCRegisterInfo &MRI,
+                                         const MCSubtargetInfo &STI,
+                                         MCContext &Ctx);
 
+MCAsmBackend *createOR1KbeAsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                     StringRef TT, StringRef CPU);
 
-MCObjectWriter *createOR1KELFObjectWriter(raw_ostream &OS, uint8_t OSABI);
+MCAsmBackend *createOR1KleAsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                     StringRef TT, StringRef CPU);
+
+MCObjectWriter *createOR1KELFObjectWriter(raw_ostream &OS, uint8_t OSABI,
+                                          bool IsLittleEndian);
 } // End llvm namespace
 
 // Defines symbolic names for OR1K registers.  This defines a mapping from

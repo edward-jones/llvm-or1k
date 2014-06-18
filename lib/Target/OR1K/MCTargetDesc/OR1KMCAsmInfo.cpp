@@ -12,10 +12,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "OR1KMCAsmInfo.h"
+#include "llvm/ADT/Triple.h"
 using namespace llvm;
 
 OR1KMCAsmInfo::OR1KMCAsmInfo(StringRef TT) {
-  IsLittleEndian              = false;
+  if (Triple(TT).getArch() == Triple::or1k)
+    IsLittleEndian = false;
+
   PrivateGlobalPrefix         = ".L";
   WeakRefDirective            = "\t.weak\t";
 

@@ -112,7 +112,9 @@ unsigned OR1KELFObjectWriter::GetRelocType(const MCValue &Target,
 }
 
 MCObjectWriter *llvm::createOR1KELFObjectWriter(raw_ostream &OS,
-                                                uint8_t OSABI) {
-  MCELFObjectTargetWriter *MOTW = new OR1KELFObjectWriter(OSABI);
-  return createELFObjectWriter(MOTW, OS, /*IsLittleEndian=*/ false);
+                                                uint8_t OSABI,
+                                                bool IsLittleEndian) {
+  MCELFObjectTargetWriter *MOTW =
+      new OR1KELFObjectWriter(OSABI);
+  return createELFObjectWriter(MOTW, OS, IsLittleEndian);
 }

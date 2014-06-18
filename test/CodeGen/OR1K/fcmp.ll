@@ -89,11 +89,11 @@ entry:
 ; CHECK: l.bf
 ; CHECK: l.and
 
-; CHECK-CMOV: lf.sfeq.s r3, r3
-; CHECK-CMOV: l.cmov [[REG_LHS:r[0-9]+]], [[REG_ONE:r[0-9]+]], r0
 ; CHECK-CMOV: lf.sfeq.s r4, r4
-; CHECK-CMOV: l.cmov [[REG_RHS:r[0-9]+]], [[REG_ONE]], r0
-; CHECK-CMOV: l.and [[REG_R]], [[REG_LHS]], [[REG_RHS]]
+; CHECK-CMOV: l.cmov [[REG_RHS:r[0-9]+]], [[REG_ONE:r[0-9]+]], r0
+; CHECK-CMOV: lf.sfeq.s r3, r3
+; CHECK-CMOV: l.cmov [[REG_LHS:r[0-9]+]], [[REG_ONE]], r0
+; CHECK-CMOV: l.and [[REG_R:r[0-9]+]], [[REG_LHS]], [[REG_RHS]]
 ; CHECK-CMOV: l.sfne [[REG_R]], r0
 
 define float @fueq(float %a, float %b) {

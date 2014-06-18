@@ -48,7 +48,8 @@ ImmutablePass *createOR1KTargetTransformInfoPass(const OR1KTargetMachine *TM);
 /// for LLVM's LSR
 Pass *createOR1KLoopStrengthReduction();
 
-extern Target TheOR1KTarget;
+extern Target TheOR1KbeTarget;
+extern Target TheOR1KleTarget;
 } // end namespace llvm;
 
 #endif

@@ -218,13 +218,13 @@ processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
   MachineFrameInfo *MFI = MF.getFrameInfo();
   MachineRegisterInfo& MRI = MF.getRegInfo();
   const TargetMachine &TM = MF.getTarget();
+  const OR1KSubtarget &ST = TM.getSubtarget<OR1KSubtarget>();
   auto TRI = static_cast<const OR1KRegisterInfo*>(TM.getRegisterInfo());
   auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
 
   bool IsPIC = MF.getTarget().getRelocationModel() == Reloc::PIC_;
 
   int64_t StackOffset = 0;
-  StackOffset -= FuncInfo->getRegSaveAreaSize();
   unsigned RegSize = OR1K::GPRRegClass.getSize();
 
   if (MFI->hasCalls() || !MRI.def_empty(TRI->getRARegister())) {
@@ -246,6 +246,12 @@ processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
     StackOffset -= RegSize;
     int BPFI = MFI->CreateFixedObject(RegSize, StackOffset, true);
     FuncInfo->setBasePointerFI(BPFI);
+  }
+
+  if (StackOffset < 0 && FuncInfo->isVariadic() && ST.isNewABI()) {
+    OR1KMachineFunctionInfo::VarArgsInfo &VAInfo = FuncInfo->getVarArgsInfo();
+    int64_t RegSaveAreaOffset = MFI->getObjectOffset(VAInfo.RegSaveAreaFI);
+    MFI->setObjectOffset(VAInfo.RegSaveAreaFI, RegSaveAreaOffset + StackOffset);
   }
 
   if (IsPIC) {

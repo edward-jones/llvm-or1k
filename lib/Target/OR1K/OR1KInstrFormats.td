@@ -1,4 +1,4 @@
-//===- OR1KInstrFormats.td - OR1K Instruction Formats ----*- tablegen -*-===//
+//===- OR1KInstrFormats.td - OR1K Instruction Formats ------*- tablegen -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -59,7 +59,7 @@ class InstBI<bits<4> op, dag outs, dag ins, string asmstr,
   let opcode = op;
 }
 
-// Floating point instructions
+// Floating point instructions.
 class InstFRR<bits<8> op, dag outs, dag ins, string asmstr,
               list<dag> pattern, InstrItinClass itin = NoItinerary>
   : InstOR1K<outs, ins, asmstr, pattern, itin> {
@@ -68,7 +68,13 @@ class InstFRR<bits<8> op, dag outs, dag ins, string asmstr,
   let Inst{7-0} = op;
 }
 
-// Pseudo instructions
+// Fixed opcode instructions.
+class FixedOp<bits<32> op, string asmstr, list<dag> pattern>
+  : InstOR1K<(outs), (ins), asmstr, pattern> {
+  let Inst{31-0} = op;
+}
+
+// Pseudo instructions.
 class Pseudo<dag outs, dag ins, string asmstr,
              list<dag> pattern, InstrItinClass itin = NoItinerary>
   : InstOR1K<outs, ins, asmstr, pattern, itin> {

@@ -429,7 +429,7 @@ AC_CACHE_CHECK([target architecture],[llvm_cv_target_arch],
   hexagon-*)              llvm_cv_target_arch="Hexagon" ;;
   nvptx-*)                llvm_cv_target_arch="NVPTX" ;;
   s390x-*)                llvm_cv_target_arch="SystemZ" ;;
-  or1k-*)                 llvm_cv_target_arch="OR1K" ;;
+  or1k-* | or1kle-*)      llvm_cv_target_arch="OR1K" ;;
   *)                      llvm_cv_target_arch="Unknown" ;;
 esac])
 
@@ -465,7 +465,7 @@ case $host in
   msp430-*)               host_arch="MSP430" ;;
   hexagon-*)              host_arch="Hexagon" ;;
   s390x-*)                host_arch="SystemZ" ;;
-  or1k-*)                 host_arch="OR1K" ;;
+  or1k-* | or1kle-*)      host_arch="OR1K" ;;
   *)                      host_arch="Unknown" ;;
 esac
 
@@ -988,6 +988,7 @@ case "$enableval" in
         systemz)  TARGETS_TO_BUILD="SystemZ $TARGETS_TO_BUILD" ;;
         r600)     TARGETS_TO_BUILD="R600 $TARGETS_TO_BUILD" ;;
         or1k)     TARGETS_TO_BUILD="OR1K $TARGETS_TO_BUILD" ;;
+        or1kle)   TARGETS_TO_BUILD="OR1K $TARGETS_TO_BUILD" ;;
         host) case "$llvm_cv_target_arch" in
             x86)         TARGETS_TO_BUILD="X86 $TARGETS_TO_BUILD" ;;
             x86_64)      TARGETS_TO_BUILD="X86 $TARGETS_TO_BUILD" ;;

@@ -37,11 +37,10 @@ namespace llvm {
     const InstrItineraryData &InstrItins;
 
   public:
-    OR1KTargetMachine(const Target &T, StringRef TT,
-                        StringRef CPU, StringRef FS,
-                        const TargetOptions &Options,
-                        Reloc::Model RM, CodeModel::Model CM,
-                        CodeGenOpt::Level OL);
+    OR1KTargetMachine(const Target &T, StringRef TT, StringRef CPU,
+                      StringRef FS, const TargetOptions &Options,
+                      Reloc::Model RM, CodeModel::Model CM,
+                      CodeGenOpt::Level OL, bool LittleEndian);
 
     const OR1KInstrInfo *getInstrInfo() const override {
       return &InstrInfo;
@@ -81,6 +80,24 @@ namespace llvm {
     const InstrItineraryData *getInstrItineraryData() const override {
         return &InstrItins;
     }
+  };
+
+  class OR1KbeTargetMachine : public OR1KTargetMachine {
+    virtual void anchor();
+  public:
+    OR1KbeTargetMachine(const Target &T, StringRef TT, StringRef CPU,
+                        StringRef FS, const TargetOptions &Options,
+                        Reloc::Model RM, CodeModel::Model CM,
+                        CodeGenOpt::Level OL);
+  };
+
+  class OR1KleTargetMachine : public OR1KTargetMachine {
+    virtual void anchor();
+  public:
+    OR1KleTargetMachine(const Target &T, StringRef TT, StringRef CPU,
+                        StringRef FS, const TargetOptions &Options,
+                        Reloc::Model RM, CodeModel::Model CM,
+                        CodeGenOpt::Level OL);
   };
 } // End llvm namespace
 

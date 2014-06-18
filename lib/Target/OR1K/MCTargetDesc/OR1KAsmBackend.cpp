@@ -25,10 +25,11 @@ namespace {
 
 class OR1KAsmBackend : public MCAsmBackend {
   Triple::OSType OSType;
+  bool IsLittleEndian;
 
 public:
-  OR1KAsmBackend(const Target &T, Triple::OSType _OSType)
-    : MCAsmBackend(), OSType(_OSType) {
+  OR1KAsmBackend(const Target &T, Triple::OSType _OSType, bool IsLittleEndian)
+    : MCAsmBackend(), OSType(_OSType), IsLittleEndian(IsLittleEndian) {
   }
 
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
@@ -116,18 +117,21 @@ void OR1KAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
   Value &= (uint64_t(1) << NumBits) - 1;
 
   // Write out the fixed up bytes back to the code/data bits.
-  for (unsigned i = 0; i != NumBytes; ++i)
-    Data[Offset + i] |= (uint8_t)(Value >> ((InstrSizeInBytes - i - 1) * 8));
+  for (unsigned i = 0; i != NumBytes; ++i) {
+    unsigned ShAmtByte = IsLittleEndian ? i : (InstrSizeInBytes - i - 1);
+    Data[Offset + i] |= (uint8_t)(Value >> (ShAmtByte * 8));
+  }
 }
 
 MCObjectWriter *OR1KAsmBackend::createObjectWriter(raw_ostream &OS) const {
   return createOR1KELFObjectWriter(OS,
-                                   MCELFObjectTargetWriter::getOSABI(OSType));
+                                   MCELFObjectTargetWriter::getOSABI(OSType),
+                                   IsLittleEndian);
 }
 
 const MCFixupKindInfo &
 OR1KAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
-  const static MCFixupKindInfo Infos[OR1K::NumTargetFixupKinds] = {
+  const static MCFixupKindInfo BigEndianInfos[OR1K::NumTargetFixupKinds] = {
     // This table *must* be in same the order of fixup_* kinds in
     // OR1KFixupKinds.h.
     //
@@ -154,17 +158,47 @@ OR1KAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_OR1K_RELATIVE",    0,      32,   0 }
   };
 
+  const static MCFixupKindInfo LittleEndianInfos[OR1K::NumTargetFixupKinds] = {
+    // This table *must* be in same the order of fixup_* kinds in
+    // OR1KFixupKinds.h.
+    //
+    // name                    offset  bits  flags
+    { "fixup_OR1K_NONE",        0,      32,   0 },
+    { "fixup_OR1K_32",          0,      32,   0 },
+    { "fixup_OR1K_16",         16,      16,   0 },
+    { "fixup_OR1K_8",          24,       8,   0 },
+    { "fixup_OR1K_LO16_INSN",  16,      16,   0 },
+    { "fixup_OR1K_HI16_INSN",  16,      16,   0 },
+    { "fixup_OR1K_REL26",       6,      26,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_OR1K_PCREL32",     0,      32,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_OR1K_PCREL16",    16,      16,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_OR1K_PCREL8",     24,       8,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_OR1K_GOTPC_HI16", 16,      16,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_OR1K_GOTPC_LO16", 16,      16,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_OR1K_GOT16",      16,      16,   0 },
+    { "fixup_OR1K_PLT26",       8,      26,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_OR1K_GOTOFF_HI16",16,      16,   0 },
+    { "fixup_OR1K_GOTOFF_LO16",16,      16,   0 },
+    { "fixup_OR1K_COPY",        0,      32,   0 },
+    { "fixup_OR1K_GLOB_DAT",    0,      32,   0 },
+    { "fixup_OR1K_JMP_SLOT",    0,      32,   0 },
+    { "fixup_OR1K_RELATIVE",    0,      32,   0 }
+  };
+
   if (Kind < FirstTargetFixupKind)
     return MCAsmBackend::getFixupKindInfo(Kind);
 
   assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
          "Invalid kind!");
-  return Infos[Kind - FirstTargetFixupKind];
+
+  int FixupId = Kind - FirstTargetFixupKind;
+  return IsLittleEndian ?
+    LittleEndianInfos[FixupId] : BigEndianInfos[FixupId];
 }
 
-MCAsmBackend *llvm::createOR1KAsmBackend(const Target &T, 
-                                         const MCRegisterInfo &MRI,
-                                         StringRef TT, StringRef CPU) {
+MCAsmBackend *llvm::createOR1KleAsmBackend(const Target &T,
+                                           const MCRegisterInfo &MRI,
+                                           StringRef TT, StringRef CPU) {
   Triple TheTriple(TT);
 
   if (TheTriple.isOSDarwin())
@@ -173,5 +207,19 @@ MCAsmBackend *llvm::createOR1KAsmBackend(const Target &T,
   if (TheTriple.isOSWindows())
     assert(0 && "Windows not supported on OR1K");
 
-  return new OR1KAsmBackend(T, Triple(TT).getOS());
+  return new OR1KAsmBackend(T, Triple(TT).getOS(), /*IsLittleEndian*/ true);
+}
+
+MCAsmBackend *llvm::createOR1KbeAsmBackend(const Target &T,
+                                           const MCRegisterInfo &MRI,
+                                           StringRef TT, StringRef CPU) {
+  Triple TheTriple(TT);
+
+  if (TheTriple.isOSDarwin())
+    assert(0 && "Mac not supported on OR1K");
+
+  if (TheTriple.isOSWindows())
+    assert(0 && "Windows not supported on OR1K");
+
+  return new OR1KAsmBackend(T, Triple(TT).getOS(), /*IsLittleEndian*/ false);
 }

@@ -249,5 +249,6 @@ bool OR1KAsmPrinter::isBlockOnlyReachableByFallthrough(const MachineBasicBlock*
 
 // Force static initialization.
 extern "C" void LLVMInitializeOR1KAsmPrinter() {
-  RegisterAsmPrinter<OR1KAsmPrinter> X(TheOR1KTarget);
+  RegisterAsmPrinter<OR1KAsmPrinter> X(TheOR1KbeTarget);
+  RegisterAsmPrinter<OR1KAsmPrinter> Y(TheOR1KleTarget);
 }

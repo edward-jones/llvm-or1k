@@ -34,7 +34,21 @@ static cl::opt<bool> DisableOR1KCustomLSR(
 
 extern "C" void LLVMInitializeOR1KTarget() {
   // Register the target.
-  RegisterTargetMachine<OR1KTargetMachine> X(TheOR1KTarget);
+  RegisterTargetMachine<OR1KbeTargetMachine> X(TheOR1KbeTarget);
+  RegisterTargetMachine<OR1KleTargetMachine> Y(TheOR1KleTarget);
+}
+
+static std::string computeDataLayoutString(OR1KSubtarget &ST) {
+  std::string Ret = "";
+
+  if (ST.isLittleEndian())
+    Ret += "e";
+  else
+    Ret += "E";
+
+  Ret += "-m:e-p:32:32-i64:32-f64:32-v64:32-v128:32-a:0:32-n32";
+
+  return Ret;
 }
 
 // DataLayout --> Big-endian, 32-bit pointer/ABI/alignment
@@ -43,17 +57,32 @@ extern "C" void LLVMInitializeOR1KTarget() {
 // its pointer. Once decremented, all references are done with positive
 // offset from the stack/frame pointer.
 OR1KTargetMachine::
-OR1KTargetMachine(const Target &T, StringRef TT,
-                    StringRef CPU, StringRef FS, const TargetOptions &Options,
-                    Reloc::Model RM, CodeModel::Model CM,
-                    CodeGenOpt::Level OL)
+OR1KTargetMachine(const Target &T, StringRef TT, StringRef CPU, StringRef FS,
+                  const TargetOptions &Options, Reloc::Model RM,
+                  CodeModel::Model CM, CodeGenOpt::Level OL, bool LittleEndian)
   : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
-  Subtarget(TT, CPU, FS),
-  DL("E-m:e-p:32:32-i64:32-f64:32-v64:32-v128:32-a:0:32-n32"),
+  Subtarget(TT, CPU, FS, LittleEndian),
+  DL(computeDataLayoutString(Subtarget)),
   InstrInfo(*this), TLInfo(*this), TSInfo(*this),
   FrameLowering(Subtarget), InstrItins(Subtarget.getInstrItineraryData()) {
   initAsmInfo();
 }
+
+OR1KbeTargetMachine::
+OR1KbeTargetMachine(const Target &T, StringRef TT, StringRef CPU, StringRef FS,
+                    const TargetOptions &Options, Reloc::Model RM,
+                    CodeModel::Model CM, CodeGenOpt::Level OL)
+  : OR1KTargetMachine(T, TT, CPU, FS, Options, RM , CM, OL, false) {}
+
+void OR1KbeTargetMachine::anchor() {}
+
+OR1KleTargetMachine::
+OR1KleTargetMachine(const Target &T, StringRef TT, StringRef CPU, StringRef FS,
+                    const TargetOptions &Options, Reloc::Model RM,
+                    CodeModel::Model CM, CodeGenOpt::Level OL)
+  : OR1KTargetMachine(T, TT, CPU, FS, Options, RM , CM, OL, true) {}
+
+void OR1KleTargetMachine::anchor() {}
 
 namespace {
 /// OR1K Code Generator Pass Configuration Options.
