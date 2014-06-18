@@ -63,7 +63,7 @@ OR1KTargetMachine(const Target &T, StringRef TT, StringRef CPU, StringRef FS,
   : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
   Subtarget(TT, CPU, FS, LittleEndian),
   DL(computeDataLayoutString(Subtarget)),
-  InstrInfo(*this), TLInfo(*this), TSInfo(*this),
+  InstrInfo(*this), TLInfo(*this), TSInfo(&DL),
   FrameLowering(Subtarget), InstrItins(Subtarget.getInstrItineraryData()) {
   initAsmInfo();
 }

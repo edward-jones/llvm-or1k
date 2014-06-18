@@ -28,9 +28,6 @@ class OR1KOperand;
 
 class OR1KAsmParser : public MCTargetAsmParser {
 public:
-  typedef SmallVectorImpl<MCParsedAsmOperand*> ParsedOperandsVector;
-
-public:
   OR1KAsmParser(MCSubtargetInfo &STI, MCAsmParser &P,
                 const MCInstrInfo &MII, const MCTargetOptions &Options)
    : STI(STI) {
@@ -39,27 +36,25 @@ public:
 
   bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc) override;
   bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
-                        SMLoc NameLoc, ParsedOperandsVector &Operands) override;
+                        SMLoc NameLoc, OperandVector &Operands) override;
 
   bool ParseDirective(AsmToken DirectiveID) override;
 
   bool MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
-                               ParsedOperandsVector &Operands,
-                               MCStreamer &Out, unsigned &ErrorInfo,
+                               OperandVector &Operands, MCStreamer &Out,
+                               unsigned &ErrorInfo,
                                bool MatchingInlineAsm) override;
 
   #define GET_ASSEMBLER_HEADER
   #include "OR1KGenAsmMatcher.inc"
 
 private:
-  bool parseOperand(ParsedOperandsVector &Operands, StringRef Name);
-  OperandMatchResultTy parseMemOperand(ParsedOperandsVector &Operands);
-  OperandMatchResultTy parseJumpTargetOperand(ParsedOperandsVector &Operands);
+  bool parseOperand(OperandVector &Operands, StringRef Name);
+  OperandMatchResultTy parseMemOperand(OperandVector &Operands);
+  OperandMatchResultTy parseJumpTargetOperand(OperandVector &Operands);
 
-  OperandMatchResultTy parseRegister(ParsedOperandsVector &Operands,
-                                     StringRef Name);
-  OperandMatchResultTy parseImmediate(ParsedOperandsVector &Operands,
-                                      StringRef Name);
+  OperandMatchResultTy parseRegister(OperandVector &Operands, StringRef Name);
+  OperandMatchResultTy parseImmediate(OperandVector &Operands, StringRef Name);
 
   bool matchImmediate(const MCExpr *&Expr, SMLoc &EndLoc);
   bool matchJumpTarget(const MCExpr *&Expr, SMLoc &EndLoc);
@@ -173,36 +168,37 @@ public:
   }
 
 public:
-  static OR1KOperand *CreateToken(StringRef Value, SMLoc StartLoc,
-                                  SMLoc EndLoc) {
-    OR1KOperand *Op = new OR1KOperand(Token);
+  static std::unique_ptr<OR1KOperand>
+  CreateToken(StringRef Value, SMLoc StartLoc, SMLoc EndLoc) {
+    auto Op = make_unique<OR1KOperand>(Token);
     Op->Value.Tok = Value;
     Op->StartLoc = StartLoc;
     Op->EndLoc = EndLoc;
     return Op;
   }
 
-  static OR1KOperand *CreateReg(unsigned Reg, SMLoc StartLoc,
-                                SMLoc EndLoc) {
-    OR1KOperand *Op = new OR1KOperand(Register);
+  static std::unique_ptr<OR1KOperand>
+  CreateReg(unsigned Reg, SMLoc StartLoc, SMLoc EndLoc) {
+    auto Op = make_unique<OR1KOperand>(Register);
     Op->Value.Reg = Reg;
     Op->StartLoc = StartLoc;
     Op->EndLoc = EndLoc;
     return Op;
   }
 
-  static OR1KOperand *CreateImm(const MCExpr *Exp, SMLoc StartLoc,
-                                SMLoc EndLoc) {
-    OR1KOperand *Op = new OR1KOperand(Immediate);
+  static std::unique_ptr<OR1KOperand>
+  CreateImm(const MCExpr *Exp, SMLoc StartLoc, SMLoc EndLoc) {
+    auto Op = make_unique<OR1KOperand>(Immediate);
     Op->Value.Imm = Exp;
     Op->StartLoc = StartLoc;
     Op->EndLoc = EndLoc;
     return Op;
   }
 
-  static OR1KOperand *CreateMem(unsigned BaseReg, const MCExpr *Offset,
-                                SMLoc StartLoc, SMLoc EndLoc) {
-    OR1KOperand *Op = new OR1KOperand(Memory);
+  static std::unique_ptr<OR1KOperand>
+  CreateMem(unsigned BaseReg, const MCExpr *Offset, SMLoc StartLoc,
+            SMLoc EndLoc) {
+    auto Op = make_unique<OR1KOperand>(Memory);
     Op->Value.Mem.BaseReg = BaseReg;
     Op->Value.Mem.Offset = Offset;
     Op->StartLoc = StartLoc;
@@ -210,16 +206,16 @@ public:
     return Op;
   }
 
-  static OR1KOperand *CreateJumpTarget(const MCExpr *Exp, SMLoc StartLoc,
-                                        SMLoc EndLoc) {
-    OR1KOperand *Op = new OR1KOperand(JumpTarget);
+  static std::unique_ptr<OR1KOperand>
+  CreateJumpTarget(const MCExpr *Exp, SMLoc StartLoc, SMLoc EndLoc) {
+    auto Op = make_unique<OR1KOperand>(JumpTarget);
     Op->Value.Imm = Exp;
     Op->StartLoc = StartLoc;
     Op->EndLoc = EndLoc;
     return Op;
   }
 
-private:
+public:
   OR1KOperand(KindTy K) : Kind(K) {}
 
 private:
@@ -364,7 +360,7 @@ bool OR1KAsmParser::matchJumpTarget(const MCExpr *&Expr, SMLoc &EndLoc) {
 }
 
 OR1KAsmParser::OperandMatchResultTy
-OR1KAsmParser::parseJumpTargetOperand(ParsedOperandsVector &Operands) {
+OR1KAsmParser::parseJumpTargetOperand(OperandVector &Operands) {
   const AsmToken &Tok = getLexer().getTok();
   SMLoc StartLoc = Tok.getLoc();
 
@@ -379,7 +375,7 @@ OR1KAsmParser::parseJumpTargetOperand(ParsedOperandsVector &Operands) {
 }
 
 OR1KAsmParser::OperandMatchResultTy
-OR1KAsmParser::parseMemOperand(ParsedOperandsVector &Operands) {
+OR1KAsmParser::parseMemOperand(OperandVector &Operands) {
   const AsmToken &Tok = getLexer().getTok();
   SMLoc StartLoc = Tok.getLoc();
 
@@ -415,7 +411,7 @@ OR1KAsmParser::parseMemOperand(ParsedOperandsVector &Operands) {
 }
 
 OR1KAsmParser::OperandMatchResultTy
-OR1KAsmParser::parseRegister(ParsedOperandsVector &Operands, StringRef Name) {
+OR1KAsmParser::parseRegister(OperandVector &Operands, StringRef Name) {
   unsigned RegNo;
   SMLoc StartLoc;
   SMLoc EndLoc;
@@ -430,7 +426,7 @@ OR1KAsmParser::parseRegister(ParsedOperandsVector &Operands, StringRef Name) {
 }
 
 OR1KAsmParser::OperandMatchResultTy
-OR1KAsmParser::parseImmediate(ParsedOperandsVector &Operands, StringRef Name) {
+OR1KAsmParser::parseImmediate(OperandVector &Operands, StringRef Name) {
   const AsmToken &Tok = getLexer().getTok();
 
   SMLoc StartLoc = Tok.getLoc();
@@ -467,8 +463,7 @@ OR1KAsmParser::parseImmediate(ParsedOperandsVector &Operands, StringRef Name) {
     }                            \
   } while (0)
 
-bool OR1KAsmParser::parseOperand(ParsedOperandsVector &Operands,
-                                 StringRef Name) {
+bool OR1KAsmParser::parseOperand(OperandVector &Operands, StringRef Name) {
   // Try custom parsers first.
   CHECK_OP_MATCH(MatchOperandParserImpl(Operands, Name));
 
@@ -485,7 +480,7 @@ bool OR1KAsmParser::parseOperand(ParsedOperandsVector &Operands,
 
 bool OR1KAsmParser::ParseInstruction(ParseInstructionInfo &Info,
                                      StringRef Name, SMLoc NameLoc,
-                                     ParsedOperandsVector &Operands) {
+                                     OperandVector &Operands) {
   // Check if we have valid mnemonic
   if (!mnemonicIsValid(Name, 0)) {
     getParser().eatToEndOfStatement();
@@ -525,7 +520,7 @@ bool OR1KAsmParser::ParseInstruction(ParseInstructionInfo &Info,
 }
 
 bool OR1KAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
-                                            ParsedOperandsVector &Operands,
+                                            OperandVector &Operands,
                                             MCStreamer &Out,
                                             unsigned &ErrorInfo,
                                             bool MatchingInlineAsm) {

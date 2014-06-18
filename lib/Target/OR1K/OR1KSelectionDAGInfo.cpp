@@ -15,8 +15,8 @@
 #include "OR1KTargetMachine.h"
 using namespace llvm;
 
-OR1KSelectionDAGInfo::OR1KSelectionDAGInfo(const OR1KTargetMachine &TM)
-  : TargetSelectionDAGInfo(TM) {
+OR1KSelectionDAGInfo::OR1KSelectionDAGInfo(const DataLayout *DL)
+  : TargetSelectionDAGInfo(DL) {
 }
 
 OR1KSelectionDAGInfo::~OR1KSelectionDAGInfo() {
