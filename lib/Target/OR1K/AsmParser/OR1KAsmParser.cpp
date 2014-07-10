@@ -552,6 +552,11 @@ bool OR1KAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 }
 
 bool OR1KAsmParser::ParseDirective(AsmToken DirectiveID) {
+  if (DirectiveID.is(AsmToken::Identifier) &&
+      DirectiveID.getIdentifier() == ".nodelay") {
+    return false;
+  }
+
   return true;
 }
 
