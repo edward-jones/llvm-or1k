@@ -1,4 +1,4 @@
-//=====-- OR1KMCAsmInfo.h - OR1K asm properties -----------*- C++ -*--====//
+//===-- OR1KMCAsmInfo.h - OR1K asm properties -----------------*- C++ -*--====//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -18,13 +18,12 @@
 #include "llvm/MC/MCAsmInfo.h"
 
 namespace llvm {
-  class Target;
-  
-  class OR1KMCAsmInfo : public MCAsmInfo {
-  public:
-    explicit OR1KMCAsmInfo(StringRef TT);
-  };
+class Target;
 
+class OR1KMCAsmInfo : public MCAsmInfo {
+public:
+  explicit OR1KMCAsmInfo(StringRef TT);
+};
 } // namespace llvm
 
 #endif

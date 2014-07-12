@@ -11,42 +11,45 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "OR1KRegisterInfo.h"
 #include "OR1K.h"
 #include "OR1KFrameLowering.h"
 #include "OR1KMachineFunctionInfo.h"
+#include "OR1KRegisterInfo.h"
 #include "OR1KSubtarget.h"
-#include "llvm/IR/Function.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineFrameInfo.h"
-#include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/RegisterScavenging.h"
-#include "llvm/Support/ErrorHandling.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/IR/Type.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Type.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Target/TargetInstrInfo.h"
+
+#define DEBUG_TYPE "or1k-register-info"
+
+using namespace llvm;
 
 #define GET_REGINFO_TARGET_DESC
 #include "OR1KGenRegisterInfo.inc"
-using namespace llvm;
 
 OR1KRegisterInfo::OR1KRegisterInfo(const TargetInstrInfo &tii)
-  : OR1KGenRegisterInfo(OR1K::R9), TII(tii) {
-}
+  : OR1KGenRegisterInfo(OR1K::R9), TII(tii) {}
 
-const uint16_t*
+const uint16_t *
 OR1KRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   return CSR_SaveList;
 }
 
-bool OR1KRegisterInfo::
-hasReservedGlobalBaseRegister(const MachineFunction &MF) const {
+bool OR1KRegisterInfo::hasReservedGlobalBaseRegister(
+    const MachineFunction &MF) const {
   if (MF.getTarget().getRelocationModel() != Reloc::PIC_)
     return false;
 
   switch (MF.getTarget().getCodeModel()) {
-  default: return true;
+  default:
+    return true;
   case CodeModel::Medium:
   case CodeModel::Large:
     return false;
@@ -69,7 +72,7 @@ unsigned OR1KRegisterInfo::getBaseRegister() const {
 
 BitVector OR1KRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   const TargetMachine &TM = MF.getTarget();
-  auto TFI = static_cast<const OR1KFrameLowering*>(TM.getFrameLowering());
+  auto TFI = static_cast<const OR1KFrameLowering *>(TM.getFrameLowering());
 
   BitVector Reserved(getNumRegs());
 
@@ -93,20 +96,19 @@ BitVector OR1KRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
-bool OR1KRegisterInfo::
-requiresRegisterScavenging(const MachineFunction &MF) const {
+bool
+OR1KRegisterInfo::requiresRegisterScavenging(const MachineFunction &MF) const {
   return true;
 }
 
-bool OR1KRegisterInfo::
-requiresFrameIndexScavenging(const MachineFunction &MF) const {
+bool OR1KRegisterInfo::requiresFrameIndexScavenging(
+    const MachineFunction &MF) const {
   return true;
 }
 
-void
-OR1KRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
-                                      int SPAdj, unsigned FIOperandNum,
-                                      RegScavenger *RS) const {
+void OR1KRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
+                                           int SPAdj, unsigned FIOperandNum,
+                                           RegScavenger *RS) const {
   assert(SPAdj == 0 && "Unexpected");
 
   MachineInstr &MI = *II;
@@ -127,12 +129,10 @@ OR1KRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   bool HasRealignedStack = needsStackRealignment(MF);
   bool IsLocalObject = FrameIndex >= 0;
 
-  bool UsesBP = MFI->hasVarSizedObjects() &&
-                IsLocalObject &&
-                HasRealignedStack;
+  bool UsesBP = MFI->hasVarSizedObjects() && IsLocalObject && HasRealignedStack;
 
-  bool NeedsPositiveOffset = !TFI->hasFP(MF) ||
-                             (IsLocalObject && HasRealignedStack);
+  bool NeedsPositiveOffset =
+      !TFI->hasFP(MF) || (IsLocalObject && HasRealignedStack);
 
   if (NeedsPositiveOffset && !UsePreviousSP)
     Offset += MFI->getStackSize();
@@ -152,7 +152,7 @@ OR1KRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     // l.ori rT, rT, lo(offset)
     // l.add rT, rT, rF
     BuildMI(MBB, II, dl, TII.get(OR1K::MOVHI), VReg)
-     .addImm((Offset >> 16) & 0xFFFFU);
+        .addImm((Offset >> 16) & 0xFFFFU);
     BuildMI(MBB, II, dl, TII.get(OR1K::ORI), VReg)
      .addReg(VReg).addImm(Offset & 0xFFFFU);
     BuildMI(MBB, II, dl, TII.get(OR1K::ADD), VReg)
@@ -175,7 +175,7 @@ bool OR1KRegisterInfo::needsStackRealignment(const MachineFunction &MF) const {
   unsigned StackAlign = MF.getTarget().getFrameLowering()->getStackAlignment();
   return ((MFI->getMaxAlignment() > StackAlign) ||
           F->getAttributes().hasAttribute(AttributeSet::FunctionIndex,
-                                     Attribute::StackAlignment));
+                                          Attribute::StackAlignment));
 }
 
 bool OR1KRegisterInfo::hasReservedSpillSlot(const MachineFunction &MF,
@@ -183,7 +183,8 @@ bool OR1KRegisterInfo::hasReservedSpillSlot(const MachineFunction &MF,
                                             int &FrameIndex) const {
   auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
   switch (Reg) {
-  default: break;
+  default:
+    break;
   case OR1K::R9:
     FrameIndex = FuncInfo->getReturnAddressFI();
     return FuncInfo->hasReturnAddressStackSlot();

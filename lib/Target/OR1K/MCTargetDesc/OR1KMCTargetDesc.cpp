@@ -1,4 +1,4 @@
-//===-- OR1KMCTargetDesc.cpp - OR1K Target Descriptions -------------------===//
+//===-- OR1KMCTargetDesc.cpp - OR1K Target Descriptions ---------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -22,6 +22,10 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 
+#define DEBUG_TYPE "or1k-mctargetdesc"
+
+using namespace llvm;
+
 #define GET_INSTRINFO_MC_DESC
 #include "OR1KGenInstrInfo.inc"
 
@@ -30,8 +34,6 @@
 
 #define GET_REGINFO_MC_DESC
 #include "OR1KGenRegisterInfo.inc"
-
-using namespace llvm;
 
 static MCInstrInfo *createOR1KMCInstrInfo() {
   MCInstrInfo *X = new MCInstrInfo();
@@ -60,11 +62,11 @@ static MCCodeGenInfo *createOR1KMCCodeGenInfo(StringRef TT, Reloc::Model RM,
   return X;
 }
 
-static MCStreamer *
-createOR1KMCStreamer(const Target &T, StringRef TT, MCContext &Ctx,
-                     MCAsmBackend &MAB, raw_ostream &OS, MCCodeEmitter *Emitter,
-                     const MCSubtargetInfo &STI, bool RelaxAll,
-                     bool NoExecStack) {
+static MCStreamer *createOR1KMCStreamer(const Target &T, StringRef TT,
+                                        MCContext &Ctx, MCAsmBackend &MAB,
+                                        raw_ostream &OS, MCCodeEmitter *Emitter,
+                                        const MCSubtargetInfo &STI,
+                                        bool RelaxAll, bool NoExecStack) {
   return createELFStreamer(Ctx, MAB, OS, Emitter, RelaxAll, NoExecStack);
 }
 
@@ -77,13 +79,10 @@ createOR1KMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
                                  InstPrint, CE, TAB, ShowInst);
 }
 
-
-static MCInstPrinter *createOR1KMCInstPrinter(const Target &T,
-                                              unsigned SyntaxVariant,
-                                              const MCAsmInfo &MAI,
-                                              const MCInstrInfo &MII,
-                                              const MCRegisterInfo &MRI,
-                                              const MCSubtargetInfo &STI) {
+static MCInstPrinter *
+createOR1KMCInstPrinter(const Target &T, unsigned SyntaxVariant,
+                        const MCAsmInfo &MAI, const MCInstrInfo &MII,
+                        const MCRegisterInfo &MRI, const MCSubtargetInfo &STI) {
   return (SyntaxVariant == 0) ? new OR1KInstPrinter(MAI, MII, MRI) : nullptr;
 }
 

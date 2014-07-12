@@ -1,4 +1,4 @@
-//===- OR1KRegisterInfo.h - OR1K Register Information Impl ------*- C++ -*-===//
+//===-- OR1KRegisterInfo.h - OR1K Register Information Impl -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -20,7 +20,6 @@
 #include "OR1KGenRegisterInfo.inc"
 
 namespace llvm {
-
 class TargetInstrInfo;
 class Type;
 
@@ -30,7 +29,6 @@ public:
 
   OR1KRegisterInfo(const TargetInstrInfo &tii);
 
-  /// Code Generation virtual methods...
   const uint16_t *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
 
   BitVector getReservedRegs(const MachineFunction &MF) const;
@@ -38,8 +36,8 @@ public:
   bool requiresRegisterScavenging(const MachineFunction &MF) const override;
   bool requiresFrameIndexScavenging(const MachineFunction &MF) const override;
 
-  void eliminateFrameIndex(MachineBasicBlock::iterator II,
-                           int SPAdj, unsigned FIOperandNum,
+  void eliminateFrameIndex(MachineBasicBlock::iterator II, int SPAdj,
+                           unsigned FIOperandNum,
                            RegScavenger *RS = NULL) const;
 
   bool needsStackRealignment(const MachineFunction &MF) const;
@@ -54,7 +52,6 @@ public:
 
   unsigned getBaseRegister() const;
 };
-
 } // end namespace llvm
 
 #endif

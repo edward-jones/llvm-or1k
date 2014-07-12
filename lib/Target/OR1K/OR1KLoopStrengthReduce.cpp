@@ -1,4 +1,4 @@
-//===-- OR1KLoopStrengthReduce.cpp - Custom strength reduction for loops --===//
+//===-- OR1KLoopStrengthReduce.cpp - Custom LSR -----------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "or1k-loop-strength-reduce"
 #include "OR1K.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SetVector.h"
@@ -35,6 +34,9 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include <algorithm>
+
+#define DEBUG_TYPE "or1k-loop-strength-reduce"
+
 using namespace llvm;
 
 namespace {
@@ -69,7 +71,9 @@ public:
     AU.setPreservesCFG();
   }
 
-  const char *getPassName() const { return "OR1K Loop Strength Reduction"; }
+  const char *getPassName() const override {
+    return "OR1K Loop Strength Reduction";
+  }
 
   bool runOnLoop(Loop *L, LPPassManager &LPM);
 };

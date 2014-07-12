@@ -1,4 +1,4 @@
-//===-- OR1KFrameLowering.cpp - OR1K Frame Information --------------------===//
+//===-- OR1KFrameLowering.cpp - OR1K Frame Lowering -------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -14,11 +14,13 @@
 #include "OR1KFrameLowering.h"
 #include "OR1KInstrInfo.h"
 #include "OR1KMachineFunctionInfo.h"
-#include "llvm/IR/Function.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/IR/Function.h"
+
+#define DEBUG_TYPE "or1k-frame-lowering"
 
 using namespace llvm;
 
@@ -27,8 +29,7 @@ bool OR1KFrameLowering::hasFP(const MachineFunction &MF) const {
   const TargetRegisterInfo *TRI = MF.getTarget().getRegisterInfo();
 
   return MF.getTarget().Options.DisableFramePointerElim(MF) ||
-         MFI->hasVarSizedObjects() ||
-         MFI->isFrameAddressTaken() ||
+         MFI->hasVarSizedObjects() || MFI->isFrameAddressTaken() ||
          TRI->needsStackRealignment(MF);
 }
 
@@ -44,10 +45,11 @@ bool OR1KFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
   return !MFI->hasVarSizedObjects();
 }
 
-void OR1KFrameLowering::
-emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
-             DebugLoc DL, const TargetInstrInfo &TII, unsigned StackSize,
-             unsigned DestReg, unsigned TmpReg, bool OnEpilogue) const {
+void OR1KFrameLowering::emitSPUpdate(MachineBasicBlock &MBB,
+                                     MachineBasicBlock::iterator &MBBI,
+                                     DebugLoc DL, const TargetInstrInfo &TII,
+                                     unsigned StackSize, unsigned DestReg,
+                                     unsigned TmpReg, bool OnEpilogue) const {
   const unsigned SPReg = OR1K::R1;
 
   int64_t StackSizeAddend = OnEpilogue ? StackSize : -(int64_t)StackSize;
@@ -69,10 +71,9 @@ emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
 
   // l.movhi rT, hi(stack_size)
   // l.ori rT, rT, lo(stack_size)
-  BuildMI(MBB, MBBI, DL, TII.get(OR1K::MOVHI), TmpReg)
-   .addImm(StackSize >> 16);
+  BuildMI(MBB, MBBI, DL, TII.get(OR1K::MOVHI), TmpReg).addImm(StackSize >> 16);
   BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), TmpReg)
-   .addReg(TmpReg).addImm(StackSize & 0xFFFFU);
+    .addReg(TmpReg).addImm(StackSize & 0xFFFFU);
 
   if (OnEpilogue)
     // l.add rD, r1, rT
@@ -90,7 +91,7 @@ void OR1KFrameLowering::emitPrologue(MachineFunction &MF) const {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetMachine &TM = MF.getTarget();
   const TargetInstrInfo &TII = *TM.getInstrInfo();
-  auto TRI = static_cast<const OR1KRegisterInfo*>(TM.getRegisterInfo());
+  auto TRI = static_cast<const OR1KRegisterInfo *>(TM.getRegisterInfo());
   auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
 
   MachineBasicBlock::iterator MBBI = MBB.begin();
@@ -117,8 +118,7 @@ void OR1KFrameLowering::emitPrologue(MachineFunction &MF) const {
     TII.storeRegToStackSlot(MBB, MBBI, FPReg, true, FI, RC, TRI);
 
     // l.ori r2, r1, 0
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), FPReg)
-      .addReg(SPReg).addImm(0);
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), FPReg).addReg(SPReg).addImm(0);
   }
 
   if (FuncInfo->hasBasePointerStackSlot()) {
@@ -141,9 +141,9 @@ void OR1KFrameLowering::emitPrologue(MachineFunction &MF) const {
     // l.srl rT, rT, AlignLog
     // l.sll r1, rT, AlignLog
     BuildMI(MBB, MBBI, DL, TII.get(OR1K::SRL_ri), ScratchReg)
-     .addReg(ScratchReg).addImm(AlignLog);
+      .addReg(ScratchReg).addImm(AlignLog);
     BuildMI(MBB, MBBI, DL, TII.get(OR1K::SLL_ri), SPReg)
-     .addReg(ScratchReg, RegState::Kill).addImm(AlignLog);
+      .addReg(ScratchReg, RegState::Kill).addImm(AlignLog);
   } else {
     // Inplace update of the stack pointer value.
     emitSPUpdate(MBB, MBBI, DL, TII, StackSize, SPReg, ScratchReg, false);
@@ -153,18 +153,17 @@ void OR1KFrameLowering::emitPrologue(MachineFunction &MF) const {
     unsigned BPReg = TRI->getBaseRegister();
 
     // l.ori r14, r1, 0
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), BPReg)
-      .addReg(SPReg).addImm(0);
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), BPReg).addReg(SPReg).addImm(0);
   }
 }
 
 void OR1KFrameLowering::emitEpilogue(MachineFunction &MF,
-                                    MachineBasicBlock &MBB) const {
+                                     MachineBasicBlock &MBB) const {
   MachineFrameInfo *MFI = MF.getFrameInfo();
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetMachine &TM = MF.getTarget();
   const TargetInstrInfo &TII = *TM.getInstrInfo();
-  auto TRI = static_cast<const OR1KRegisterInfo*>(TM.getRegisterInfo());
+  auto TRI = static_cast<const OR1KRegisterInfo *>(TM.getRegisterInfo());
   auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
 
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
@@ -180,8 +179,7 @@ void OR1KFrameLowering::emitEpilogue(MachineFunction &MF,
     unsigned FPReg = TRI->getFrameRegister(MF);
 
     // l.ori r1, r2, 0
-    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), SPReg)
-     .addReg(FPReg).addImm(0);
+    BuildMI(MBB, MBBI, DL, TII.get(OR1K::ORI), SPReg).addReg(FPReg).addImm(0);
   } else {
     assert(!hasBP(MF) && "Unexpected BP without FP.");
     emitSPUpdate(MBB, MBBI, DL, TII, StackSize, SPReg, ScratchReg, true);
@@ -212,14 +210,13 @@ void OR1KFrameLowering::emitEpilogue(MachineFunction &MF,
   }
 }
 
-void OR1KFrameLowering::
-processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
-                                     RegScavenger *RS) const {
+void OR1KFrameLowering::processFunctionBeforeCalleeSavedScan(
+    MachineFunction &MF, RegScavenger *RS) const {
   MachineFrameInfo *MFI = MF.getFrameInfo();
-  MachineRegisterInfo& MRI = MF.getRegInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetMachine &TM = MF.getTarget();
   const OR1KSubtarget &ST = TM.getSubtarget<OR1KSubtarget>();
-  auto TRI = static_cast<const OR1KRegisterInfo*>(TM.getRegisterInfo());
+  auto TRI = static_cast<const OR1KRegisterInfo *>(TM.getRegisterInfo());
   auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
 
   bool IsPIC = MF.getTarget().getRelocationModel() == Reloc::PIC_;
@@ -261,24 +258,24 @@ processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
   }
 }
 
-bool OR1KFrameLowering::
-requiresCustomSpillRestore(const MachineFunction &MF, unsigned Reg,
-                           const OR1KRegisterInfo *TRI) const {
+bool OR1KFrameLowering::requiresCustomSpillRestore(
+    const MachineFunction &MF, unsigned Reg,
+    const OR1KRegisterInfo *TRI) const {
   return (hasFP(MF) && Reg == TRI->getFrameRegister(MF)) ||
          (hasBP(MF) && Reg == TRI->getBaseRegister()) ||
          Reg == TRI->getRARegister();
 }
 
-bool OR1KFrameLowering::
-spillCalleeSavedRegisters(MachineBasicBlock &MBB,
-                          MachineBasicBlock::iterator MI,
-                          const std::vector<CalleeSavedInfo> &CSI,
-                          const TargetRegisterInfo *TRI) const {
+bool OR1KFrameLowering::spillCalleeSavedRegisters(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
+    const std::vector<CalleeSavedInfo> &CSI,
+    const TargetRegisterInfo *TRI) const {
   MachineFunction &MF = *MBB.getParent();
   const TargetInstrInfo &TII = *MF.getTarget().getInstrInfo();
   auto OR1KTRI = static_cast<const OR1KRegisterInfo *>(TRI);
   for (std::vector<CalleeSavedInfo>::const_iterator I = CSI.begin(),
-       E = CSI.end(); I != E; ++I) {
+                                                    E = CSI.end();
+       I != E; ++I) {
     unsigned Reg = I->getReg();
     MBB.addLiveIn(Reg);
 
@@ -291,16 +288,16 @@ spillCalleeSavedRegisters(MachineBasicBlock &MBB,
   return true;
 }
 
-bool OR1KFrameLowering::
-restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
-                            MachineBasicBlock::iterator MI,
-                            const std::vector<CalleeSavedInfo> &CSI,
-                            const TargetRegisterInfo *TRI) const {
+bool OR1KFrameLowering::restoreCalleeSavedRegisters(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
+    const std::vector<CalleeSavedInfo> &CSI,
+    const TargetRegisterInfo *TRI) const {
   MachineFunction &MF = *MBB.getParent();
   const TargetInstrInfo &TII = *MF.getTarget().getInstrInfo();
   auto OR1KTRI = static_cast<const OR1KRegisterInfo *>(TRI);
   for (std::vector<CalleeSavedInfo>::const_reverse_iterator I = CSI.rbegin(),
-       E = CSI.rend(); I != E; ++I) {
+                                                            E = CSI.rend();
+       I != E; ++I) {
     unsigned Reg = I->getReg();
     if (!MBB.isLiveIn(Reg))
       MBB.addLiveIn(Reg);
@@ -314,10 +311,9 @@ restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
   return true;
 }
 
-void OR1KFrameLowering::
-eliminateCallFramePseudoInstr(MachineFunction &MF,
-                              MachineBasicBlock &MBB,
-                              MachineBasicBlock::iterator MI) const {
+void OR1KFrameLowering::eliminateCallFramePseudoInstr(
+    MachineFunction &MF, MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator MI) const {
   assert(MI->getOpcode() == OR1K::ADJCALLSTACKDOWN ||
          MI->getOpcode() == OR1K::ADJCALLSTACKUP);
 
@@ -335,7 +331,6 @@ eliminateCallFramePseudoInstr(MachineFunction &MF,
   const unsigned SPReg = OR1K::R1;
   DebugLoc dl = MI->getDebugLoc();
 
-
   if (MI->getOpcode() == OR1K::ADJCALLSTACKDOWN)
     Addend = -Addend;
 
@@ -350,7 +345,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF,
     // l.ori rT, rT, lo(Addend)
     // l.add r1, r1, rT
     BuildMI(MBB, MI, dl, TII.get(OR1K::MOVHI), VReg)
-     .addImm((Addend >> 16) & 0xFFFFU);
+        .addImm((Addend >> 16) & 0xFFFFU);
     BuildMI(MBB, MI, dl, TII.get(OR1K::ORI), VReg)
      .addReg(VReg).addImm(Addend & 0xFFFFU);
     BuildMI(MBB, MI, dl, TII.get(OR1K::ADD), SPReg)

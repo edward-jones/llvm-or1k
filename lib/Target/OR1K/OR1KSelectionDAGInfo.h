@@ -1,4 +1,4 @@
-//===-- OR1KSelectionDAGInfo.h - OR1K SelectionDAG Info -----*- C++ -*-===//
+//===-- OR1KSelectionDAGInfo.h - OR1K SelectionDAG Info ---------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -17,7 +17,6 @@
 #include "llvm/Target/TargetSelectionDAGInfo.h"
 
 namespace llvm {
-
 class OR1KTargetMachine;
 
 class OR1KSelectionDAGInfo : public TargetSelectionDAGInfo {
@@ -25,7 +24,6 @@ public:
   explicit OR1KSelectionDAGInfo(const DataLayout *DL);
   ~OR1KSelectionDAGInfo();
 };
-
 }
 
 #endif

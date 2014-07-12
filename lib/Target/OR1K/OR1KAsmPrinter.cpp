@@ -1,4 +1,4 @@
-//===-- OR1KAsmPrinter.cpp - OR1K LLVM assembly writer --------------------===//
+//===-- OR1KAsmPrinter.cpp - OR1K LLVM assembly writer ----------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,55 +12,56 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "asm-printer"
 #include "OR1K.h"
+#include "InstPrinter/OR1KInstPrinter.h"
+#include "MCTargetDesc/OR1KMCExpr.h"
 #include "OR1KInstrInfo.h"
 #include "OR1KMCInstLower.h"
 #include "OR1KTargetMachine.h"
-#include "InstPrinter/OR1KInstPrinter.h"
-#include "MCTargetDesc/OR1KMCExpr.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Module.h"
 #include "llvm/CodeGen/AsmPrinter.h"
-#include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Mangler.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/IR/Mangler.h"
-#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
+
+#define DEBUG_TYPE "or1k-asm-printer"
+
 using namespace llvm;
 
 namespace {
-
 class OR1KAsmPrinter : public AsmPrinter {
 public:
   explicit OR1KAsmPrinter(TargetMachine &TM, MCStreamer &Streamer)
-    : AsmPrinter(TM, Streamer) {}
+      : AsmPrinter(TM, Streamer) {}
 
-  virtual const char *getPassName() const {
+  const char *getPassName() const override {
     return "OR1K Assembly Printer";
   }
 
-  void printOperand(const MachineInstr *MI, int OpNum,
-                    raw_ostream &O, const char* Modifier = 0);
+  void printOperand(const MachineInstr *MI, int OpNum, raw_ostream &O,
+                    const char *Modifier = 0);
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
                        unsigned AsmVariant, const char *ExtraCode,
                        raw_ostream &O);
   void EmitInstruction(const MachineInstr *MI);
-  virtual bool isBlockOnlyReachableByFallthrough(const MachineBasicBlock*
-                                                 MBB) const;
+  bool isBlockOnlyReachableByFallthrough(
+      const MachineBasicBlock *MBB) const override;
+
 private:
   void lowerGET_GLOBAL_BASE(const MachineInstr *MI);
 };
-
 }
 
 void OR1KAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
@@ -89,8 +90,8 @@ void OR1KAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
     break;
 
   case MachineOperand::MO_BlockAddress:
-     O << GetBlockAddressSymbol(MO.getBlockAddress())->getName();
-     break;
+    O << GetBlockAddressSymbol(MO.getBlockAddress())->getName();
+    break;
 
   case MachineOperand::MO_ExternalSymbol:
     if (TF == OR1KII::MO_PLT26)
@@ -112,11 +113,10 @@ void OR1KAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
   }
 }
 
-/// PrintAsmOperand - Print out an operand for an inline asm expression.
-///
+/// \brief Print out an operand for an inline asm expression.
 bool OR1KAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                                     unsigned AsmVariant,
-                                     const char *ExtraCode, raw_ostream &O) {
+                                     unsigned AsmVariant, const char *ExtraCode,
+                                     raw_ostream &O) {
   // Does this asm operand have a single letter operand modifier?
   if (ExtraCode && ExtraCode[0]) {
     if (ExtraCode[1])
@@ -154,7 +154,8 @@ void OR1KAsmPrinter::lowerGET_GLOBAL_BASE(const MachineInstr *MI) {
   unsigned GlobalBaseReg = MI->getOperand(0).getReg();
 
   switch (TM.getRelocationModel()) {
-  default: llvm_unreachable("Unexpected relocation model for GET_GLOBAL_BASE");
+  default:
+    llvm_unreachable("Unexpected relocation model for GET_GLOBAL_BASE");
   case Reloc::PIC_: {
     // Computation of the global base relative of a given code location.
     //
@@ -166,8 +167,8 @@ void OR1KAsmPrinter::lowerGET_GLOBAL_BASE(const MachineInstr *MI) {
 
     StringRef GOTName("_GLOBAL_OFFSET_TABLE_");
     const MCExpr *GOT =
-      MCSymbolRefExpr::Create(OutContext.GetOrCreateSymbol(GOTName),
-                              MCSymbolRefExpr::VK_None, OutContext);
+        MCSymbolRefExpr::Create(OutContext.GetOrCreateSymbol(GOTName),
+                                MCSymbolRefExpr::VK_None, OutContext);
 
     MCInst I1, I2, I3, I4;
     I1.setOpcode(OR1K::JAL);
@@ -185,8 +186,8 @@ void OR1KAsmPrinter::lowerGET_GLOBAL_BASE(const MachineInstr *MI) {
     I3.setOpcode(OR1K::ORI);
     I3.addOperand(MCOperand::CreateReg(GlobalBaseReg));
     I3.addOperand(MCOperand::CreateReg(GlobalBaseReg));
-    const MCExpr *Lo = OR1KMCExpr::Create(OR1KMCExpr::VK_OR1K_GOTPC_LO16,
-                                          GOT, OutContext);
+    const MCExpr *Lo =
+        OR1KMCExpr::Create(OR1KMCExpr::VK_OR1K_GOTPC_LO16, GOT, OutContext);
     I3.addOperand(MCOperand::CreateExpr(Lo));
     OutStreamer.EmitInstruction(I3, getSubtargetInfo());
 
@@ -197,7 +198,6 @@ void OR1KAsmPrinter::lowerGET_GLOBAL_BASE(const MachineInstr *MI) {
     OutStreamer.EmitInstruction(I4, getSubtargetInfo());
   }
   }
-
 }
 
 void OR1KAsmPrinter::EmitInstruction(const MachineInstr *MI) {
@@ -211,7 +211,8 @@ void OR1KAsmPrinter::EmitInstruction(const MachineInstr *MI) {
     switch (I->getOpcode()) {
     case OR1K::GET_GLOBAL_BASE:
       return lowerGET_GLOBAL_BASE(I);
-    default: break;
+    default:
+      break;
     }
 
     MCInst TmpInst;
@@ -220,12 +221,12 @@ void OR1KAsmPrinter::EmitInstruction(const MachineInstr *MI) {
   } while ((++I != E) && I->isInsideBundle());
 }
 
-/// isBlockOnlyReachableByFallthough - Return true if the basic block has
-/// exactly one predecessor and the control transfer mechanism between
-/// the predecessor and this block is a fall-through.
+/// \brief Return true if the basic block has exactly one predecessor and the
+/// control transfer mechanism between the predecessor and this block is a
+/// fall-through.
 // FIXME: could the overridden cases be handled in AnalyzeBranch?
-bool OR1KAsmPrinter::isBlockOnlyReachableByFallthrough(const MachineBasicBlock*
-                                                       MBB) const {
+bool OR1KAsmPrinter::isBlockOnlyReachableByFallthrough(
+    const MachineBasicBlock *MBB) const {
   // The predecessor has to be immediately before this block.
   const MachineBasicBlock *Pred = *MBB->pred_begin();
 
@@ -242,7 +243,8 @@ bool OR1KAsmPrinter::isBlockOnlyReachableByFallthrough(const MachineBasicBlock*
   // Otherwise, check the last instruction.
   // Check if the last terminator is an unconditional branch.
   MachineBasicBlock::const_iterator I = Pred->end();
-  while (I != Pred->begin() && !(--I)->isTerminator()) ;
+  while (I != Pred->begin() && !(--I)->isTerminator())
+    ;
 
   return !I->isBarrier();
 }

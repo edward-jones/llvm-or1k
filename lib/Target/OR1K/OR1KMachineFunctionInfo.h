@@ -13,12 +13,12 @@
 
 #ifndef OR1KMACHINEFUNCTIONINFO_H
 #define OR1KMACHINEFUNCTIONINFO_H
+
 #include "OR1KRegisterInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 
 namespace llvm {
-
 class OR1KMachineFunctionInfo : public MachineFunctionInfo {
 public:
   struct VarArgsInfo {
@@ -32,8 +32,8 @@ public:
 
 public:
   OR1KMachineFunctionInfo(MachineFunction &MF)
-   : SRetReg(0), GlobalBaseReg(0), RegSaveAreaSize(0), ReturnAddressFI(0),
-     FramePointerFI(0), BasePointerFI(0), IsVariadic(false) {}
+      : SRetReg(0), GlobalBaseReg(0), RegSaveAreaSize(0), ReturnAddressFI(0),
+        FramePointerFI(0), BasePointerFI(0), IsVariadic(false) {}
 
   bool hasSRetReturnReg() const { return SRetReg != 0; }
   unsigned getSRetReturnReg() const { return SRetReg; }
@@ -86,7 +86,6 @@ private:
   bool IsVariadic;
   VarArgsInfo VAInfo;
 };
-
-} // End llvm namespace
+} // end llvm namespace
 
 #endif

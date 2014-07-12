@@ -15,7 +15,6 @@
 #include "llvm/MC/MCValue.h"
 
 namespace llvm {
-
 class OR1KMCExpr : public MCTargetExpr {
 public:
   enum VariantKind {
@@ -61,16 +60,15 @@ public:
 public:
   static VariantKind getVariantKindForName(StringRef Name);
   static StringRef getVariantKindName(VariantKind VK);
-  
+
 private:
   explicit OR1KMCExpr(VariantKind VK, const MCExpr *Expr)
-   : Variant(VK), Expr(Expr) {}
+      : Variant(VK), Expr(Expr) {}
 
 private:
   VariantKind Variant;
   const MCExpr *Expr;
 };
-
 }
 
 #endif

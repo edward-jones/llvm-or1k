@@ -1,4 +1,4 @@
-//===-- OR1KTargetMachine.cpp - Define TargetMachine for OR1K ---------===//
+//===-- OR1KTargetMachine.cpp - Define TargetMachine for OR1K ---*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -13,10 +13,10 @@
 
 #include "OR1K.h"
 #include "OR1KTargetMachine.h"
-#include "llvm/PassManager.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/IR/IRPrintingPasses.h"
+#include "llvm/PassManager.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormattedStream.h"
@@ -24,13 +24,13 @@
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/Scalar.h"
 
+#define DEBUG_TYPE "or1k-target-machine"
+
 using namespace llvm;
 
-static cl::opt<bool> DisableOR1KCustomLSR(
-  "disable-or1k-custom-lsr",
-  cl::init(false),
-  cl::desc("Disable custom OR1K custom LSR"),
-  cl::Hidden);
+static cl::opt<bool>
+DisableOR1KCustomLSR("disable-or1k-custom-lsr", cl::init(false),
+                     cl::desc("Disable custom OR1K custom LSR"), cl::Hidden);
 
 extern "C" void LLVMInitializeOR1KTarget() {
   // Register the target.
@@ -56,31 +56,34 @@ static std::string computeDataLayoutString(OR1KSubtarget &ST) {
 // On function prologue, the stack is created by decrementing
 // its pointer. Once decremented, all references are done with positive
 // offset from the stack/frame pointer.
-OR1KTargetMachine::
-OR1KTargetMachine(const Target &T, StringRef TT, StringRef CPU, StringRef FS,
-                  const TargetOptions &Options, Reloc::Model RM,
-                  CodeModel::Model CM, CodeGenOpt::Level OL, bool LittleEndian)
-  : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
-  Subtarget(TT, CPU, FS, LittleEndian),
-  DL(computeDataLayoutString(Subtarget)),
-  InstrInfo(*this), TLInfo(*this), TSInfo(&DL),
-  FrameLowering(Subtarget), InstrItins(Subtarget.getInstrItineraryData()) {
+OR1KTargetMachine::OR1KTargetMachine(const Target &T, StringRef TT,
+                                     StringRef CPU, StringRef FS,
+                                     const TargetOptions &Options,
+                                     Reloc::Model RM, CodeModel::Model CM,
+                                     CodeGenOpt::Level OL, bool LittleEndian)
+    : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
+      Subtarget(TT, CPU, FS, LittleEndian),
+      DL(computeDataLayoutString(Subtarget)), InstrInfo(*this), TLInfo(*this),
+      TSInfo(&DL), FrameLowering(Subtarget),
+      InstrItins(Subtarget.getInstrItineraryData()) {
   initAsmInfo();
 }
 
-OR1KbeTargetMachine::
-OR1KbeTargetMachine(const Target &T, StringRef TT, StringRef CPU, StringRef FS,
-                    const TargetOptions &Options, Reloc::Model RM,
-                    CodeModel::Model CM, CodeGenOpt::Level OL)
-  : OR1KTargetMachine(T, TT, CPU, FS, Options, RM , CM, OL, false) {}
+OR1KbeTargetMachine::OR1KbeTargetMachine(const Target &T, StringRef TT,
+                                         StringRef CPU, StringRef FS,
+                                         const TargetOptions &Options,
+                                         Reloc::Model RM, CodeModel::Model CM,
+                                         CodeGenOpt::Level OL)
+    : OR1KTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, false) {}
 
 void OR1KbeTargetMachine::anchor() {}
 
-OR1KleTargetMachine::
-OR1KleTargetMachine(const Target &T, StringRef TT, StringRef CPU, StringRef FS,
-                    const TargetOptions &Options, Reloc::Model RM,
-                    CodeModel::Model CM, CodeGenOpt::Level OL)
-  : OR1KTargetMachine(T, TT, CPU, FS, Options, RM , CM, OL, true) {}
+OR1KleTargetMachine::OR1KleTargetMachine(const Target &T, StringRef TT,
+                                         StringRef CPU, StringRef FS,
+                                         const TargetOptions &Options,
+                                         Reloc::Model RM, CodeModel::Model CM,
+                                         CodeGenOpt::Level OL)
+    : OR1KTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, true) {}
 
 void OR1KleTargetMachine::anchor() {}
 
@@ -89,7 +92,7 @@ namespace {
 class OR1KPassConfig : public TargetPassConfig {
 public:
   OR1KPassConfig(OR1KTargetMachine *TM, PassManagerBase &PM)
-    : TargetPassConfig(TM, PM) {}
+      : TargetPassConfig(TM, PM) {}
 
   OR1KTargetMachine &getOR1KTargetMachine() const {
     return getTM<OR1KTargetMachine>();
@@ -107,8 +110,7 @@ TargetPassConfig *OR1KTargetMachine::createPassConfig(PassManagerBase &PM) {
   return new OR1KPassConfig(this, PM);
 }
 
-// Install an instruction selector pass using
-// the ISelDag to gen OR1K code.
+// Install an instruction selector pass using the ISelDag to gen OR1K code.
 bool OR1KPassConfig::addInstSelector() {
   addPass(createOR1KISelDag(getOR1KTargetMachine()));
 
@@ -118,19 +120,16 @@ bool OR1KPassConfig::addInstSelector() {
 // Implemented by targets that want to run passes immediately before
 // machine code is emitted. return true if -print-machineinstrs should
 // print out the code after the passes.
-
 bool OR1KPassConfig::addPreEmitPass() {
   addPass(createOR1KDelaySlotFillerPass(getOR1KTargetMachine()));
   addPass(createOR1KFunnyNOPReplacer());
   return true;
 }
 
-bool OR1KPassConfig::addPreISel() {
-  return true;
-}
+bool OR1KPassConfig::addPreISel() { return true; }
 
-/// Add common target configurable passes that perform LLVM IR to IR transforms
-/// following machine independent optimization.
+/// \brief Add common target configurable passes that perform LLVM IR to IR
+/// transforms following machine independent optimization.
 void OR1KPassConfig::addIRPasses() {
   // Basic AliasAnalysis support.
   // Add TypeBasedAliasAnalysis before BasicAliasAnalysis so that

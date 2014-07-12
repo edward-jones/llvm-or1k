@@ -49,11 +49,10 @@ MCAsmBackend *createOR1KleAsmBackend(const Target &T, const MCRegisterInfo &MRI,
 
 MCObjectWriter *createOR1KELFObjectWriter(raw_ostream &OS, uint8_t OSABI,
                                           bool IsLittleEndian);
-} // End llvm namespace
+} // end llvm namespace
 
 // Defines symbolic names for OR1K registers.  This defines a mapping from
 // register name to register number.
-//
 #define GET_REGINFO_ENUM
 #include "OR1KGenRegisterInfo.inc"
 

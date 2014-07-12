@@ -1,4 +1,4 @@
-//===-- OR1KISelLowering.h - OR1K DAG Lowering Interface -......-*- C++ -*-===//
+//===-- OR1KISelLowering.h - OR1K DAG Lowering Interface --------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -17,11 +17,10 @@
 
 #include "OR1K.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/Target/TargetLowering.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
-
 namespace OR1KISD {
 enum {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
@@ -47,7 +46,6 @@ public:
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
   const char *getTargetNodeName(unsigned Opcode) const override;
 
-
   SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
                                bool isVarArg,
                                const SmallVectorImpl<ISD::InputArg> &Ins,
@@ -59,25 +57,23 @@ public:
 
   SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
                           CallingConv::ID CallConv, bool isVarArg,
-                          const SmallVectorImpl<ISD::InputArg> &Ins,
-                          SDLoc dl, SelectionDAG &DAG,
+                          const SmallVectorImpl<ISD::InputArg> &Ins, SDLoc dl,
+                          SelectionDAG &DAG,
                           SmallVectorImpl<SDValue> &InVals) const;
 
-  SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv,
-                      bool isVarArg,
+  SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
                       const SmallVectorImpl<ISD::OutputArg> &Outs,
-                      const SmallVectorImpl<SDValue> &OutVals,
-                      SDLoc dl, SelectionDAG &DAG) const override;
+                      const SmallVectorImpl<SDValue> &OutVals, SDLoc dl,
+                      SelectionDAG &DAG) const override;
 
-  std::pair<unsigned, const TargetRegisterClass*>
+  std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const std::string &Constraint,
                                MVT VT) const override;
   ConstraintWeight
   getSingleConstraintMatchWeight(AsmOperandInfo &info,
                                  const char *constraint) const override;
 
-  void LowerAsmOperandForConstraint(SDValue Op,
-                                    std::string &Constraint,
+  void LowerAsmOperandForConstraint(SDValue Op, std::string &Constraint,
                                     std::vector<SDValue> &Ops,
                                     SelectionDAG &DAG) const override;
 
@@ -87,7 +83,7 @@ public:
 
   bool isLegalAddImmediate(int64_t) const override;
   bool isLegalICmpImmediate(int64_t) const override;
-  bool isLegalAddressingMode(const AddrMode& AM, Type* Ty) const override;
+  bool isLegalAddressingMode(const AddrMode &AM, Type *Ty) const override;
 
 private:
   SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
@@ -113,7 +109,6 @@ private:
   const OR1KTargetMachine &TM;
   const DataLayout *DL;
 };
-
 }
 
 #endif

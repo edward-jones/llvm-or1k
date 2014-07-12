@@ -11,6 +11,7 @@
 // the OR1K target useful for the compiler back-end and the MC libraries.
 //
 //===----------------------------------------------------------------------===//
+
 #ifndef OR1KBASEINFO_H
 #define OR1KBASEINFO_H
 
@@ -20,12 +21,9 @@
 #include "llvm/Support/ErrorHandling.h"
 
 namespace llvm {
-
-/// OR1KII - This namespace holds all of the target specific flags that
+/// \brief This namespace holds all of the target specific flags that
 /// instruction info tracks.
-///
 namespace OR1KII {
-
 /// Target Operand Flag enum.
 enum TOF {
   MO_NO_FLAG,
@@ -50,8 +48,7 @@ enum TOF {
   // location.
   MO_PLT26
 };
-
+}
 }
 
-}
 #endif

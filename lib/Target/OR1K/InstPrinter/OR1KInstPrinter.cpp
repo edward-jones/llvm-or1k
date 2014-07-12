@@ -1,4 +1,4 @@
-//===-- OR1KInstPrinter.cpp - Convert OR1K MCInst to asm syntax -----------===//
+//===-- OR1KInstPrinter.cpp - Convert OR1K MCInst to asm syntax -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "asm-printer"
 #include "OR1K.h"
 #include "OR1KInstPrinter.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -20,8 +19,10 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
-using namespace llvm;
 
+#define DEBUG_TYPE "or1k-asm-printer"
+
+using namespace llvm;
 
 // Include the auto-generated portion of the assembly writer.
 #include "OR1KGenAsmWriter.inc"
@@ -49,7 +50,7 @@ void OR1KInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
 void OR1KInstPrinter::printMemOperand(const MCInst *MI, int OpNo,
                                       raw_ostream &O, const char *Modifier) {
   const MCOperand &RegOp = MI->getOperand(OpNo);
-  const MCOperand &OffsetOp = MI->getOperand(OpNo+1);
+  const MCOperand &OffsetOp = MI->getOperand(OpNo + 1);
   // offset
   if (OffsetOp.isImm()) {
     O << OffsetOp.getImm();
@@ -59,7 +60,7 @@ void OR1KInstPrinter::printMemOperand(const MCInst *MI, int OpNo,
   }
   // register
   assert(RegOp.isReg() && "Register operand not a register");
-  O  << "(" << getRegisterName(RegOp.getReg()) << ")";
+  O << "(" << getRegisterName(RegOp.getReg()) << ")";
 }
 
 void OR1KInstPrinter::printS16ImmOperand(const MCInst *MI, unsigned OpNo,

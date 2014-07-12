@@ -1,4 +1,4 @@
-//===- OR1KSubtarget.cpp - OR1K Subtarget Information -------------*- C++ -*-=//
+//===- OR1KSubtarget.cpp - OR1K Subtarget Information -----------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -17,20 +17,20 @@
 
 #define DEBUG_TYPE "or1k-subtarget"
 
+using namespace llvm;
+
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "OR1KGenSubtargetInfo.inc"
 
-using namespace llvm;
-
-void OR1KSubtarget::anchor() { }
+void OR1KSubtarget::anchor() {}
 
 OR1KSubtarget::OR1KSubtarget(const std::string &TT, const std::string &CPU,
                              const std::string &FS, bool LittleEndian)
- : OR1KGenSubtargetInfo(TT, CPU, FS), OR1KABI(DefaultABI),
-   HasMul(false), HasMul64(false), HasDiv(false), HasRor(false), HasCmov(false),
-   HasMAC(false), HasExt(false), HasSFII(false), HasFBit(false),
-   DelaySlotType(DelayType::Delay), IsLittleEndian(LittleEndian) {
+    : OR1KGenSubtargetInfo(TT, CPU, FS), OR1KABI(DefaultABI), HasMul(false),
+      HasMul64(false), HasDiv(false), HasRor(false), HasCmov(false),
+      HasMAC(false), HasExt(false), HasSFII(false), HasFBit(false),
+      DelaySlotType(DelayType::Delay), IsLittleEndian(LittleEndian) {
   std::string CPUName = CPU;
   if (CPUName.empty())
     CPUName = "generic";
@@ -42,8 +42,8 @@ OR1KSubtarget::OR1KSubtarget(const std::string &TT, const std::string &CPU,
 
 bool
 OR1KSubtarget::enablePostRAScheduler(CodeGenOpt::Level OptLevel,
-                                     AntiDepBreakMode& Mode,
-                                     RegClassVector& CriticalPathRCs) const {
+                                     AntiDepBreakMode &Mode,
+                                     RegClassVector &CriticalPathRCs) const {
   Mode = TargetSubtargetInfo::ANTIDEP_NONE;
 
   CriticalPathRCs.clear();

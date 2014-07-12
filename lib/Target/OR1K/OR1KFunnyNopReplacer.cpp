@@ -1,4 +1,4 @@
-//===-- OR1kFunnyNOPReplacer.cpp - OR1K Funny Nop Replacer  ---------------===//
+//===-- OR1kFunnyNOPReplacer.cpp - OR1K Funny Nop Replacer  -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,8 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "funny-nop-replacer"
-
 #include "OR1K.h"
 #include "OR1KTargetMachine.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -21,13 +19,13 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Process.h"
 
+#define DEBUG_TYPE "or1k-funny-nop-replacer"
+
 using namespace llvm;
 
-static cl::opt<bool> FunnyNOPReplacer(
-  "funny-or1k-nop-replacer",
-  cl::init(false),
-  cl::desc("Replace normal nops with funny nops"),
-  cl::Hidden);
+static cl::opt<bool>
+FunnyNOPReplacer("funny-or1k-nop-replacer", cl::init(false),
+                 cl::desc("Replace normal nops with funny nops"), cl::Hidden);
 
 static unsigned int hexSpeakCodes[] = {
   0x10CC,
@@ -72,27 +70,21 @@ public:
     return Changed;
   }
 };
-
-} // end of anonymous namespace
-
 char FunnyNOP::ID = 0;
+}
 
-/// createOR1KFunnyNOPReplacer - Returns a pass that replaces normal NOPs with
-/// funny NOPs
 FunctionPass *llvm::createOR1KFunnyNOPReplacer() {
   return new FunnyNOP();
 }
 
-/// runOnMachineBasicBlock - Fill in delay slots for the given basic block.
-/// There is only one delay slot per delayed instruction.
 bool FunnyNOP::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
   bool Changed = false;
 
-  // Replace NOPs only if enabled
+  // Replaces NOPs only if this pass is enabled
   if (!FunnyNOPReplacer)
     return false;
 
-  // Iterate over each instruction of the basic block
+  // Iterates over each instruction of the basic block
   for (MachineInstr &I : MBB) {
     // If the instruction is a NOP replace its immediate value with a funny one.
     if (I.getDesc().getOpcode() == OR1K::NOP) {

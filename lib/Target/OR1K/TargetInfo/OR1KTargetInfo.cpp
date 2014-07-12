@@ -1,4 +1,4 @@
-//===-- OR1KTargetInfo.cpp - OR1K Target Implementation -----------------===//
+//===-- OR1KTargetInfo.cpp - OR1K Target Implementation ---------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -10,12 +10,15 @@
 #include "OR1K.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/TargetRegistry.h"
+
+#define DEBUG_TYPE "or1k-target-info"
+
 using namespace llvm;
 
 Target llvm::TheOR1KbeTarget;
 Target llvm::TheOR1KleTarget;
 
-extern "C" void LLVMInitializeOR1KTargetInfo() { 
+extern "C" void LLVMInitializeOR1KTargetInfo() {
   RegisterTarget<Triple::or1k> X(TheOR1KbeTarget, "or1k", "OR1K");
   RegisterTarget<Triple::or1kle> Y(TheOR1KleTarget, "or1kle", "OR1KLE");
 }

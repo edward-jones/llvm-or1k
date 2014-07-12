@@ -1,4 +1,4 @@
-//===-- OR1KMCAsmInfo.cpp - OR1K asm properties -----------------------===//
+//===-- OR1KMCAsmInfo.cpp - OR1K asm properties -----------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -13,14 +13,17 @@
 
 #include "OR1KMCAsmInfo.h"
 #include "llvm/ADT/Triple.h"
+
+#define DEBUG_TYPE "or1k-mcasm-info"
+
 using namespace llvm;
 
 OR1KMCAsmInfo::OR1KMCAsmInfo(StringRef TT) {
   if (Triple(TT).getArch() == Triple::or1k)
     IsLittleEndian = false;
 
-  PrivateGlobalPrefix         = ".L";
-  WeakRefDirective            = "\t.weak\t";
+  PrivateGlobalPrefix = ".L";
+  WeakRefDirective = "\t.weak\t";
 
   // OR1K assembly requires ".section" before ".bss"
   UsesELFSectionDirectiveForBSS = true;

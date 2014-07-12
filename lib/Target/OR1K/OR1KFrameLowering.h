@@ -6,10 +6,6 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
-//
-//
-//===----------------------------------------------------------------------===//
 
 #ifndef OR1K_FRAMEINFO_H
 #define OR1K_FRAMEINFO_H
@@ -18,15 +14,14 @@
 #include "llvm/Target/TargetFrameLowering.h"
 
 namespace llvm {
-
 class OR1KRegisterInfo;
 class OR1KSubtarget;
 
 class OR1KFrameLowering : public TargetFrameLowering {
 public:
   explicit OR1KFrameLowering(const OR1KSubtarget &sti)
-   : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, 4, 0, 4),
-     STI(sti) {}
+      : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, 4, 0, 4),
+        STI(sti) {}
 
   bool hasFP(const MachineFunction &MF) const;
 
@@ -61,14 +56,12 @@ private:
                     DebugLoc DL, const TargetInstrInfo &TII, unsigned StackSize,
                     unsigned DestReg, unsigned TmpReg, bool OnEpilogue) const;
 
-  bool requiresCustomSpillRestore(const MachineFunction &MF,
-                                  unsigned Reg,
+  bool requiresCustomSpillRestore(const MachineFunction &MF, unsigned Reg,
                                   const OR1KRegisterInfo *TRI) const;
 
 protected:
   const OR1KSubtarget &STI;
 };
-
-} // End llvm namespace
+} // end llvm namespace
 
 #endif

@@ -1,4 +1,4 @@
-//===-- OR1kDelaySlotFiller.cpp - OR1K delay slot filler ------------------===//
+//===-- OR1kDelaySlotFiller.cpp - OR1K delay slot filler --------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,77 +11,73 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "delay-slot-filler"
-
 #include "OR1K.h"
 #include "OR1KTargetMachine.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/ADT/SmallSet.h"
-#include "llvm/ADT/Statistic.h"
+
+#define DEBUG_TYPE "or1k-delay-slot-filler"
 
 using namespace llvm;
+
 typedef OR1KSubtarget::DelayType DelayType;
 
 STATISTIC(FilledSlots, "Number of delay slots filled");
 
 namespace {
-  class Filler : public MachineFunctionPass {
-  public:
-    /// Target machine description which we query for reg. names, data
-    /// layout, etc.
-    TargetMachine &TM;
-    const TargetInstrInfo *TII;
-    MachineBasicBlock::instr_iterator LastFiller;
+class Filler : public MachineFunctionPass {
+public:
+  /// \brief Target machine description which we query for reg. names, data
+  /// layout, etc.
+  TargetMachine &TM;
+  const TargetInstrInfo *TII;
+  MachineBasicBlock::instr_iterator LastFiller;
 
-    static char ID;
-    Filler(TargetMachine &tm)
-      : MachineFunctionPass(ID), TM(tm), TII(tm.getInstrInfo()) { }
+  static char ID;
+  Filler(TargetMachine &tm)
+      : MachineFunctionPass(ID), TM(tm), TII(tm.getInstrInfo()) {}
 
-    virtual const char *getPassName() const {
-      return "OR1K Delay Slot Filler";
-    }
+  const char *getPassName() const override {
+    return "OR1K Delay Slot Filler";
+  }
 
-    bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
-    bool runOnMachineFunction(MachineFunction &F) {
-      bool Changed = false;
-      for (MachineFunction::iterator FI = F.begin(), FE = F.end();
-           FI != FE; ++FI)
-        Changed |= runOnMachineBasicBlock(*FI);
-      return Changed;
-    }
+  bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
+  bool runOnMachineFunction(MachineFunction &F) {
+    bool Changed = false;
+    for (MachineFunction::iterator FI = F.begin(), FE = F.end(); FI != FE; ++FI)
+      Changed |= runOnMachineBasicBlock(*FI);
+    return Changed;
+  }
 
-    void insertDefsUses(MachineBasicBlock::instr_iterator MI,
-                        SmallSet<unsigned, 32>& RegDefs,
-                        SmallSet<unsigned, 32>& RegUses,
-                        SmallSet<unsigned, 32>& RegDeadDefs);
+  void insertDefsUses(MachineBasicBlock::instr_iterator MI,
+                      SmallSet<unsigned, 32> &RegDefs,
+                      SmallSet<unsigned, 32> &RegUses,
+                      SmallSet<unsigned, 32> &RegDeadDefs);
 
-    bool IsRegInSet(SmallSet<unsigned, 32>& RegSet,
-                    unsigned Reg);
+  bool IsRegInSet(SmallSet<unsigned, 32> &RegSet, unsigned Reg);
 
-    bool delayHasHazard(MachineBasicBlock::instr_iterator MI,
-                        bool &sawLoad, bool &sawStore,
-                        SmallSet<unsigned, 32> &RegDefs,
-                        SmallSet<unsigned, 32> &RegUses,
-                        SmallSet<unsigned, 32> &RegDeadDefs);
+  bool delayHasHazard(MachineBasicBlock::instr_iterator MI, bool &sawLoad,
+                      bool &sawStore, SmallSet<unsigned, 32> &RegDefs,
+                      SmallSet<unsigned, 32> &RegUses,
+                      SmallSet<unsigned, 32> &RegDeadDefs);
 
-    bool
-    findDelayInstr(MachineBasicBlock &MBB,
-                   MachineBasicBlock::instr_iterator slot,
-                   MachineBasicBlock::instr_iterator &Filler);
-  };
-  char Filler::ID = 0;
+  bool findDelayInstr(MachineBasicBlock &MBB,
+                      MachineBasicBlock::instr_iterator slot,
+                      MachineBasicBlock::instr_iterator &Filler);
+};
+char Filler::ID = 0;
 } // end of anonymous namespace
 
-/// createOR1KDelaySlotFillerPass - Returns a pass that fills in delay
-/// slots in OR1K MachineFunctions
+/// \brief Returns a pass that fills in delay slots in OR1K MachineFunctions.
 FunctionPass *llvm::createOR1KDelaySlotFillerPass(OR1KTargetMachine &tm) {
   return new Filler(tm);
 }
 
-/// runOnMachineBasicBlock - Fill in delay slots for the given basic block.
+/// \brief Fill in delay slots for the given basic block.
 /// There is only one delay slot per delayed instruction.
 bool Filler::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
   bool Changed = false;
@@ -98,8 +94,7 @@ bool Filler::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
       MachineBasicBlock::instr_iterator J = I;
 
       if (TM.getOptLevel() != CodeGenOpt::None &&
-	  !(Delay == DelayType::CompatDelay) &&
-	  findDelayInstr(MBB, I, J))
+          !(Delay == DelayType::CompatDelay) && findDelayInstr(MBB, I, J))
         MBB.splice(std::next(I), &MBB, J);
       else
         BuildMI(MBB, std::next(I), DebugLoc(), TII->get(OR1K::NOP)).addImm(0);
@@ -139,12 +134,8 @@ bool Filler::findDelayInstr(MachineBasicBlock &MBB,
     // Convert to forward iterator.
     MachineBasicBlock::instr_iterator FI(std::next(I).base());
 
-    if (I->hasUnmodeledSideEffects() ||
-        I->isInlineAsm()             ||
-        I->isLabel()                 ||
-        FI == LastFiller             ||
-        I->isPseudo()
-        )
+    if (I->hasUnmodeledSideEffects() || I->isInlineAsm() || I->isLabel() ||
+        FI == LastFiller || I->isPseudo())
       break;
 
     if (delayHasHazard(FI, sawLoad, sawStore, RegDefs, RegUses, RegDeadDefs)) {
@@ -157,9 +148,8 @@ bool Filler::findDelayInstr(MachineBasicBlock &MBB,
   return false;
 }
 
-bool Filler::delayHasHazard(MachineBasicBlock::instr_iterator MI,
-                            bool &sawLoad, bool &sawStore,
-                            SmallSet<unsigned, 32> &RegDefs,
+bool Filler::delayHasHazard(MachineBasicBlock::instr_iterator MI, bool &sawLoad,
+                            bool &sawStore, SmallSet<unsigned, 32> &RegDefs,
                             SmallSet<unsigned, 32> &RegUses,
                             SmallSet<unsigned, 32> &RegDeadDefs) {
   if (MI->isImplicitDef() || MI->isKill())
@@ -184,7 +174,7 @@ bool Filler::delayHasHazard(MachineBasicBlock::instr_iterator MI,
   assert((!MI->isCall() && !MI->isReturn()) &&
          "Cannot put calls or returns in delay slot.");
 
-  for (unsigned i = 0, e = MI->getNumOperands(); i!= e; ++i) {
+  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
     unsigned Reg;
 
@@ -205,15 +195,15 @@ bool Filler::delayHasHazard(MachineBasicBlock::instr_iterator MI,
   return false;
 }
 
-// Insert Defs and Uses of MI into the sets RegDefs and RegUses.
+/// \brief Insert Defs and Uses of MI into the sets RegDefs and RegUses.
 void Filler::insertDefsUses(MachineBasicBlock::instr_iterator MI,
-                            SmallSet<unsigned, 32>& RegDefs,
-                            SmallSet<unsigned, 32>& RegUses,
-                            SmallSet<unsigned, 32>& RegDeadDefs) {
+                            SmallSet<unsigned, 32> &RegDefs,
+                            SmallSet<unsigned, 32> &RegUses,
+                            SmallSet<unsigned, 32> &RegDeadDefs) {
   // If MI is a call or return, just examine the explicit non-variadic operands.
   MCInstrDesc MCID = MI->getDesc();
-  unsigned e = MI->isCall() || MI->isReturn() ? MCID.getNumOperands() :
-                                                MI->getNumOperands();
+  unsigned e = MI->isCall() || MI->isReturn() ? MCID.getNumOperands()
+                                              : MI->getNumOperands();
 
   // Add R9 to RegDefs to prevent users of R9 from going into delay slot.
   if (MI->isCall())
@@ -239,11 +229,11 @@ void Filler::insertDefsUses(MachineBasicBlock::instr_iterator MI,
   }
 }
 
-//returns true if the Reg or its alias is in the RegSet.
-bool Filler::IsRegInSet(SmallSet<unsigned, 32>& RegSet, unsigned Reg) {
+/// \brief Returns true if the Reg or its alias is in the RegSet.
+bool Filler::IsRegInSet(SmallSet<unsigned, 32> &RegSet, unsigned Reg) {
   // Check Reg and all aliased Registers.
-  for (MCRegAliasIterator AI(Reg, TM.getRegisterInfo(), true);
-       AI.isValid(); ++AI)
+  for (MCRegAliasIterator AI(Reg, TM.getRegisterInfo(), true); AI.isValid();
+       ++AI)
     if (RegSet.count(*AI))
       return true;
   return false;

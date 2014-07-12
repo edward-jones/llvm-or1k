@@ -1,4 +1,4 @@
-//===- OR1KInstrInfo.h - OR1K Instruction Information ---------*- C++ -*-===//
+//===-- OR1KInstrInfo.h - OR1K Instruction Information ----------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -22,41 +22,38 @@
 #include "OR1KGenInstrInfo.inc"
 
 namespace llvm {
-
 class OR1KInstrInfo : public OR1KGenInstrInfo {
   const OR1KRegisterInfo RI;
+
 public:
   explicit OR1KInstrInfo(TargetMachine &TM);
 
   unsigned getGlobalBaseReg(MachineFunction &MF) const;
 
-  /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
-  /// such, whenever a client has an instance of instruction info, it should
+  /// \brief TargetInstrInfo is a superset of MRegister info.
+  /// As such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).
-  ///
   virtual const OR1KRegisterInfo &getRegisterInfo() const { return RI; }
 
-  virtual void copyPhysReg(MachineBasicBlock &MBB,
-                           MachineBasicBlock::iterator I, DebugLoc DL,
-                           unsigned DestReg, unsigned SrcReg,
-                           bool KillSrc) const;
+  void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                   DebugLoc DL, unsigned DestReg, unsigned SrcReg,
+                   bool KillSrc) const override;
 
-  virtual void storeRegToStackSlot(MachineBasicBlock &MBB,
-                                   MachineBasicBlock::iterator MBBI,
-                                   unsigned SrcReg, bool isKill, int FrameIndex,
-                                   const TargetRegisterClass *RC,
-                                   const TargetRegisterInfo *TRI) const;
+  void storeRegToStackSlot(MachineBasicBlock &MBB,
+                           MachineBasicBlock::iterator MBBI, unsigned SrcReg,
+                           bool isKill, int FrameIndex,
+                           const TargetRegisterClass *RC,
+                           const TargetRegisterInfo *TRI) const override;
 
-  virtual void loadRegFromStackSlot(MachineBasicBlock &MBB,
-                                    MachineBasicBlock::iterator MBBI,
-                                    unsigned DestReg, int FrameIndex,
-                                    const TargetRegisterClass *RC,
-                                    const TargetRegisterInfo *TRI) const;
-  bool AnalyzeBranch(MachineBasicBlock &MBB,
-                     MachineBasicBlock *&TBB, MachineBasicBlock *&FBB,
+  void loadRegFromStackSlot(MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator MBBI, unsigned DestReg,
+                            int FrameIndex, const TargetRegisterClass *RC,
+                            const TargetRegisterInfo *TRI) const override;
+
+  bool AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
+                     MachineBasicBlock *&FBB,
                      SmallVectorImpl<MachineOperand> &Cond,
                      bool AllowModify) const;
-
   unsigned RemoveBranch(MachineBasicBlock &MBB) const;
   unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
                         MachineBasicBlock *FBB,

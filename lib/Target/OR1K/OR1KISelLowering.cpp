@@ -1,4 +1,4 @@
-//===-- OR1KISelLowering.cpp - OR1K DAG Lowering Implementation  ----------===//
+//===-- OR1KISelLowering.cpp - OR1K DAG Lowering Implementation -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,20 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "or1k-lower"
-
-#include "OR1KISelLowering.h"
 #include "OR1K.h"
+#include "OR1KISelLowering.h"
 #include "OR1KMachineFunctionInfo.h"
 #include "OR1KRegisterInfo.h"
-#include "OR1KTargetMachine.h"
 #include "OR1KSubtarget.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/CallingConv.h"
-#include "llvm/IR/GlobalVariable.h"
-#include "llvm/IR/GlobalAlias.h"
+#include "OR1KTargetMachine.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -33,16 +25,25 @@
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/ValueTypes.h"
+#include "llvm/IR/CallingConv.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalAlias.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetLowering.h"
+
+#define DEBUG_TYPE "or1k-isel-lowering"
+
 using namespace llvm;
 
-OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm) :
-  TargetLowering(tm, new TargetLoweringObjectFileELF()),
-  Subtarget(*tm.getSubtargetImpl()), TM(tm) {
+OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm)
+    : TargetLowering(tm, new TargetLoweringObjectFileELF()),
+      Subtarget(*tm.getSubtargetImpl()), TM(tm) {
 
   DL = getDataLayout();
 
@@ -56,92 +57,92 @@ OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm) :
 
   setStackPointerRegisterToSaveRestore(OR1K::R1);
 
-  setOperationAction(ISD::BR_CC,             MVT::i32, Custom);
-  setOperationAction(ISD::BR_CC,             MVT::f32, Custom);
-  setOperationAction(ISD::BR_JT,             MVT::Other, Expand);
-  setOperationAction(ISD::BRCOND,            MVT::Other, Expand);
-  setOperationAction(ISD::SETCC,             MVT::i32, Expand);
-  setOperationAction(ISD::SETCC,             MVT::f32, Expand);
-  setOperationAction(ISD::SELECT,            MVT::i32, Expand);
-  setOperationAction(ISD::SELECT,            MVT::f32, Expand);
-  setOperationAction(ISD::SELECT_CC,         MVT::i32, Custom);
-  setOperationAction(ISD::SELECT_CC,         MVT::f32, Custom);
+  setOperationAction(ISD::BR_CC, MVT::i32, Custom);
+  setOperationAction(ISD::BR_CC, MVT::f32, Custom);
+  setOperationAction(ISD::BR_JT, MVT::Other, Expand);
+  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
+  setOperationAction(ISD::SETCC, MVT::i32, Expand);
+  setOperationAction(ISD::SETCC, MVT::f32, Expand);
+  setOperationAction(ISD::SELECT, MVT::i32, Expand);
+  setOperationAction(ISD::SELECT, MVT::f32, Expand);
+  setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
+  setOperationAction(ISD::SELECT_CC, MVT::f32, Custom);
 
-  setOperationAction(ISD::GlobalAddress,     MVT::i32, Custom);
-  setOperationAction(ISD::BlockAddress,      MVT::i32, Custom);
-  setOperationAction(ISD::JumpTable,         MVT::i32, Custom);
+  setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
+  setOperationAction(ISD::BlockAddress, MVT::i32, Custom);
+  setOperationAction(ISD::JumpTable, MVT::i32, Custom);
 
   if (!TM.Options.UseSoftFloat)
-    setOperationAction(ISD::ConstantFP,       MVT::f32,   Legal);
+    setOperationAction(ISD::ConstantFP, MVT::f32, Legal);
 
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32, Expand);
-  setOperationAction(ISD::STACKSAVE,          MVT::Other, Expand);
-  setOperationAction(ISD::STACKRESTORE,       MVT::Other, Expand);
+  setOperationAction(ISD::STACKSAVE, MVT::Other, Expand);
+  setOperationAction(ISD::STACKRESTORE, MVT::Other, Expand);
 
-  setOperationAction(ISD::VASTART,            MVT::Other, Custom);
-  setOperationAction(ISD::VAARG,              MVT::Other, Expand);
-  setOperationAction(ISD::VACOPY,             MVT::Other, Custom);
-  setOperationAction(ISD::VAEND,              MVT::Other, Expand);
+  setOperationAction(ISD::VASTART, MVT::Other, Custom);
+  setOperationAction(ISD::VAARG, MVT::Other, Expand);
+  setOperationAction(ISD::VACOPY, MVT::Other, Custom);
+  setOperationAction(ISD::VAEND, MVT::Other, Expand);
 
   if (!Subtarget.hasDiv()) {
-    setOperationAction(ISD::SDIV,            MVT::i32, Expand);
-    setOperationAction(ISD::UDIV,            MVT::i32, Expand);
+    setOperationAction(ISD::SDIV, MVT::i32, Expand);
+    setOperationAction(ISD::UDIV, MVT::i32, Expand);
   }
-  setOperationAction(ISD::SDIVREM,           MVT::i32, Expand);
-  setOperationAction(ISD::UDIVREM,           MVT::i32, Expand);
-  setOperationAction(ISD::SREM,              MVT::i32, Expand);
-  setOperationAction(ISD::UREM,              MVT::i32, Expand);
+  setOperationAction(ISD::SDIVREM, MVT::i32, Expand);
+  setOperationAction(ISD::UDIVREM, MVT::i32, Expand);
+  setOperationAction(ISD::SREM, MVT::i32, Expand);
+  setOperationAction(ISD::UREM, MVT::i32, Expand);
 
   if (!Subtarget.hasMul()) {
-    setOperationAction(ISD::MUL,             MVT::i32, Expand);
+    setOperationAction(ISD::MUL, MVT::i32, Expand);
   }
 
   if (!Subtarget.hasMul64()) {
-    setOperationAction(ISD::MULHU,           MVT::i32, Expand);
-    setOperationAction(ISD::MULHS,           MVT::i32, Expand);
-    setOperationAction(ISD::UMUL_LOHI,       MVT::i32, Expand);
-    setOperationAction(ISD::SMUL_LOHI,       MVT::i32, Expand);
+    setOperationAction(ISD::MULHU, MVT::i32, Expand);
+    setOperationAction(ISD::MULHS, MVT::i32, Expand);
+    setOperationAction(ISD::UMUL_LOHI, MVT::i32, Expand);
+    setOperationAction(ISD::SMUL_LOHI, MVT::i32, Expand);
   }
 
   setOperationAction(ISD::SUBC, MVT::i32, Expand);
   setOperationAction(ISD::SUBE, MVT::i32, Expand);
 
   if (!Subtarget.hasRor()) {
-    setOperationAction(ISD::ROTR,            MVT::i32, Expand);
+    setOperationAction(ISD::ROTR, MVT::i32, Expand);
   }
 
-  setOperationAction(ISD::ROTL,              MVT::i32, Expand);
-  setOperationAction(ISD::SHL_PARTS,         MVT::i32, Expand);
-  setOperationAction(ISD::SRL_PARTS,         MVT::i32, Expand);
-  setOperationAction(ISD::SRA_PARTS,         MVT::i32, Expand);
+  setOperationAction(ISD::ROTL, MVT::i32, Expand);
+  setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
+  setOperationAction(ISD::SRL_PARTS, MVT::i32, Expand);
+  setOperationAction(ISD::SRA_PARTS, MVT::i32, Expand);
 
-  setOperationAction(ISD::BSWAP,             MVT::i32, Expand);
+  setOperationAction(ISD::BSWAP, MVT::i32, Expand);
   if (Subtarget.hasFBit()) {
-    setOperationAction(ISD::CTTZ,            MVT::i32, Custom);
-    setOperationAction(ISD::CTLZ,            MVT::i32, Custom);
+    setOperationAction(ISD::CTTZ, MVT::i32, Custom);
+    setOperationAction(ISD::CTLZ, MVT::i32, Custom);
     setOperationAction(ISD::CTTZ_ZERO_UNDEF, MVT::i32, Custom);
     setOperationAction(ISD::CTLZ_ZERO_UNDEF, MVT::i32, Custom);
   } else {
-    setOperationAction(ISD::CTTZ,            MVT::i32, Expand);
-    setOperationAction(ISD::CTLZ,            MVT::i32, Expand);
+    setOperationAction(ISD::CTTZ, MVT::i32, Expand);
+    setOperationAction(ISD::CTLZ, MVT::i32, Expand);
     setOperationAction(ISD::CTTZ_ZERO_UNDEF, MVT::i32, Expand);
     setOperationAction(ISD::CTLZ_ZERO_UNDEF, MVT::i32, Expand);
   }
-  setOperationAction(ISD::CTPOP,             MVT::i32, Expand);
+  setOperationAction(ISD::CTPOP, MVT::i32, Expand);
 
-  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,   Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1, Expand);
   if (!Subtarget.hasExt()) {
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8, Expand);
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Expand);
   }
 
   // Extended load operations for i1 types must be promoted
-  setLoadExtAction(ISD::EXTLOAD,             MVT::i1,   Promote);
-  setLoadExtAction(ISD::ZEXTLOAD,            MVT::i1,   Promote);
-  setLoadExtAction(ISD::SEXTLOAD,            MVT::i1,   Promote);
+  setLoadExtAction(ISD::EXTLOAD, MVT::i1, Promote);
+  setLoadExtAction(ISD::ZEXTLOAD, MVT::i1, Promote);
+  setLoadExtAction(ISD::SEXTLOAD, MVT::i1, Promote);
 
-  setOperationAction(ISD::FP_TO_UINT,        MVT::i32,  Expand);
-  setOperationAction(ISD::UINT_TO_FP,        MVT::i32,  Expand);
+  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Expand);
+  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Expand);
 
   // Function alignments (log2)
   setMinFunctionAlignment(2);
@@ -154,35 +155,57 @@ OR1KTargetLowering::OR1KTargetLowering(OR1KTargetMachine &tm) :
 
 const char *OR1KTargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch (Opcode) {
-  default: return nullptr;
-  case OR1KISD::Return: return "OR1KISD::Return";
-  case OR1KISD::Call: return "OR1KISD::Call";
-  case OR1KISD::Select: return "OR1KISD::Select";
-  case OR1KISD::SetFlag: return "OR1KISD::SetFlag";
-  case OR1KISD::BrCond: return "OR1KISD::BrCond";
-  case OR1KISD::FF1: return "OR1KISD::FF1";
-  case OR1KISD::FL1: return "OR1KISD::FL1";
-  case OR1KISD::HiLo: return "OR1KISD::HiLo";
+  default:
+    return nullptr;
+  case OR1KISD::Return:
+    return "OR1KISD::Return";
+  case OR1KISD::Call:
+    return "OR1KISD::Call";
+  case OR1KISD::Select:
+    return "OR1KISD::Select";
+  case OR1KISD::SetFlag:
+    return "OR1KISD::SetFlag";
+  case OR1KISD::BrCond:
+    return "OR1KISD::BrCond";
+  case OR1KISD::FF1:
+    return "OR1KISD::FF1";
+  case OR1KISD::FL1:
+    return "OR1KISD::FL1";
+  case OR1KISD::HiLo:
+    return "OR1KISD::HiLo";
   }
 }
 
 SDValue OR1KTargetLowering::LowerOperation(SDValue Op,
                                            SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
-  default: llvm_unreachable("Unexpected operation lowering!");
-  case ISD::GlobalAddress: return LowerGlobalAddress(Op, DAG);
-  case ISD::BlockAddress: return LowerBlockAddress(Op, DAG);
-  case ISD::JumpTable: return LowerJumpTable(Op, DAG);
-  case ISD::BR_CC: return LowerBR_CC(Op, DAG);
-  case ISD::SELECT_CC: return LowerSELECT_CC(Op, DAG);
-  case ISD::VASTART: return LowerVASTART(Op, DAG);
-  case ISD::VACOPY: return LowerVACOPY(Op, DAG);
-  case ISD::CTTZ: return LowerCTTZ(Op, DAG);
-  case ISD::CTTZ_ZERO_UNDEF: return LowerCTTZ_ZERO_UNDEF(Op, DAG);
-  case ISD::CTLZ: // fallthrough
-  case ISD::CTLZ_ZERO_UNDEF: return LowerCTLZ(Op, DAG);
-  case ISD::RETURNADDR: return LowerRETURNADDR(Op, DAG);
-  case ISD::FRAMEADDR: return LowerFRAMEADDR(Op, DAG);
+  default:
+    llvm_unreachable("Unexpected operation lowering!");
+  case ISD::GlobalAddress:
+    return LowerGlobalAddress(Op, DAG);
+  case ISD::BlockAddress:
+    return LowerBlockAddress(Op, DAG);
+  case ISD::JumpTable:
+    return LowerJumpTable(Op, DAG);
+  case ISD::BR_CC:
+    return LowerBR_CC(Op, DAG);
+  case ISD::SELECT_CC:
+    return LowerSELECT_CC(Op, DAG);
+  case ISD::VASTART:
+    return LowerVASTART(Op, DAG);
+  case ISD::VACOPY:
+    return LowerVACOPY(Op, DAG);
+  case ISD::CTTZ:
+    return LowerCTTZ(Op, DAG);
+  case ISD::CTTZ_ZERO_UNDEF:
+    return LowerCTTZ_ZERO_UNDEF(Op, DAG);
+  case ISD::CTLZ:
+  case ISD::CTLZ_ZERO_UNDEF:
+    return LowerCTLZ(Op, DAG);
+  case ISD::RETURNADDR:
+    return LowerRETURNADDR(Op, DAG);
+  case ISD::FRAMEADDR:
+    return LowerFRAMEADDR(Op, DAG);
   }
 }
 
@@ -191,13 +214,12 @@ SDValue OR1KTargetLowering::LowerOperation(SDValue Op,
 //===----------------------------------------------------------------------===//
 
 namespace {
-
 class OR1KCCState : public CCState {
 public:
   OR1KCCState(CallingConv::ID CC, bool IsVarArg, MachineFunction &MF,
               const TargetMachine &TM, SmallVectorImpl<CCValAssign> &Locs,
               LLVMContext &C)
-   : CCState(CC, IsVarArg, MF, TM, Locs, C), IsEndOfFixedArgs(false) {}
+      : CCState(CC, IsVarArg, MF, TM, Locs, C), IsEndOfFixedArgs(false) {}
 
   void AnalyzeCallOperands(const SmallVectorImpl<ISD::OutputArg> &Outs,
                            CCAssignFn Fn);
@@ -207,12 +229,11 @@ public:
 private:
   bool IsEndOfFixedArgs;
 };
-
 }
 
-void OR1KCCState::
-AnalyzeCallOperands(const SmallVectorImpl<ISD::OutputArg> &Outs,
-                    CCAssignFn Fn) {
+void
+OR1KCCState::AnalyzeCallOperands(const SmallVectorImpl<ISD::OutputArg> &Outs,
+                                 CCAssignFn Fn) {
   unsigned NumOps = Outs.size();
   for (unsigned i = 0; i != NumOps; ++i) {
     MVT ArgVT = Outs[i].VT;
@@ -233,10 +254,8 @@ static bool CC_OR1K32_PairedArgs(unsigned ValNo, MVT ValVT, MVT LocVT,
                                  ISD::ArgFlagsTy ArgFlags, CCState &State) {
   assert(ArgFlags.isSplit() && "Unexpected non Split argument!");
 
-  static const MCPhysReg Regs[] = {
-    OR1K::R3, OR1K::R4, OR1K::R5,
-    OR1K::R6, OR1K::R7, OR1K::R8
-  };
+  static const MCPhysReg Regs[] = {OR1K::R3, OR1K::R4, OR1K::R5,
+                                   OR1K::R6, OR1K::R7, OR1K::R8};
   const unsigned NumRegs = array_lengthof(Regs);
 
   unsigned FirstUnalloc = State.getFirstUnallocated(Regs, NumRegs);
@@ -260,7 +279,7 @@ static bool CC_OR1K32_PairedArgs(unsigned ValNo, MVT ValVT, MVT LocVT,
 #include "OR1KGenCallingConv.inc"
 
 static SDValue HandleVarArgs_NewABI(SDValue Chain, OR1KCCState &CCInfo,
-                                   SDLoc dl, SelectionDAG &DAG) {
+                                    SDLoc dl, SelectionDAG &DAG) {
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo *MFI = MF.getFrameInfo();
   auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
@@ -272,10 +291,8 @@ static SDValue HandleVarArgs_NewABI(SDValue Chain, OR1KCCState &CCInfo,
   int StackOffset = CCInfo.getNextStackOffset();
   VAInfo.StackAreaFI = MFI->CreateFixedObject(1, StackOffset, true);
 
-  static const MCPhysReg Regs[] = {
-    OR1K::R3, OR1K::R4, OR1K::R5,
-    OR1K::R6, OR1K::R7, OR1K::R8
-  };
+  static const MCPhysReg Regs[] = {OR1K::R3, OR1K::R4, OR1K::R5,
+                                   OR1K::R6, OR1K::R7, OR1K::R8};
   const unsigned NumRegs = array_lengthof(Regs);
 
   unsigned FirstUnalloc = CCInfo.getFirstUnallocated(Regs, NumRegs);
@@ -308,26 +325,25 @@ static SDValue HandleVarArgs_NewABI(SDValue Chain, OR1KCCState &CCInfo,
     SDValue Val = DAG.getCopyFromReg(Chain, dl, VReg, MVT::i32);
     SDValue Ptr = DAG.getNode(ISD::ADD, dl, MVT::i32, Base,
                               DAG.getConstant(Offset, MVT::i32));
-    Chain = DAG.getStore(Chain, dl, Val, Ptr, MachinePointerInfo(),
-                         false, false, 0);
+    Chain = DAG.getStore(Chain, dl, Val, Ptr, MachinePointerInfo(), false,
+                         false, 0);
   }
 
   return Chain;
 }
 
-SDValue OR1KTargetLowering::
-LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
-                     bool IsVarArg, const SmallVectorImpl<ISD::InputArg> &Ins,
-                     SDLoc dl, SelectionDAG &DAG,
-                     SmallVectorImpl<SDValue> &InVals) const {
+SDValue OR1KTargetLowering::LowerFormalArguments(
+    SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
+    const SmallVectorImpl<ISD::InputArg> &Ins, SDLoc dl, SelectionDAG &DAG,
+    SmallVectorImpl<SDValue> &InVals) const {
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo *MFI = MF.getFrameInfo();
   auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
 
   // Assign locations to all of the incoming arguments.
   SmallVector<CCValAssign, 16> ArgLocs;
-  OR1KCCState CCInfo(CallConv, IsVarArg, MF, getTargetMachine(),
-                     ArgLocs, *DAG.getContext());
+  OR1KCCState CCInfo(CallConv, IsVarArg, MF, getTargetMachine(), ArgLocs,
+                     *DAG.getContext());
   CCInfo.AnalyzeFormalArguments(Ins, CC_OR1K32);
 
   SDValue ArgsChain = DAG.getUNDEF(MVT::Other);
@@ -376,10 +392,9 @@ LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
 
       int FI = MFI->CreateFixedObject(ObjSize, ObjOffset, true);
 
-      ArgValue = DAG.getLoad(VA.getLocVT(), dl, ArgsChain,
-                             DAG.getFrameIndex(FI, MVT::i32),
-                             MachinePointerInfo::getFixedStack(FI),
-                             false, false, false, 0);
+      ArgValue = DAG.getLoad(
+          VA.getLocVT(), dl, ArgsChain, DAG.getFrameIndex(FI, MVT::i32),
+          MachinePointerInfo::getFixedStack(FI), false, false, false, 0);
     }
 
     InVals.push_back(ArgValue);
@@ -403,11 +418,12 @@ LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
   return Chain;
 }
 
-SDValue OR1KTargetLowering::
-LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
-            const SmallVectorImpl<ISD::OutputArg> &Outs,
-            const SmallVectorImpl<SDValue> &OutVals,
-            SDLoc dl, SelectionDAG &DAG) const {
+SDValue
+OR1KTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
+                                bool IsVarArg,
+                                const SmallVectorImpl<ISD::OutputArg> &Outs,
+                                const SmallVectorImpl<SDValue> &OutVals,
+                                SDLoc dl, SelectionDAG &DAG) const {
   MachineFunction &MF = DAG.getMachineFunction();
   auto FuncInfo = MF.getInfo<OR1KMachineFunctionInfo>();
 
@@ -422,8 +438,7 @@ LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
     CCValAssign &VA = RVLocs[i];
     assert(VA.isRegLoc() && "Can only return in registers!");
 
-    Chain = DAG.getCopyToReg(Chain, dl, VA.getLocReg(),
-                             OutVals[i], Flag);
+    Chain = DAG.getCopyToReg(Chain, dl, VA.getLocReg(), OutVals[i], Flag);
     Flag = Chain.getValue(1);
 
     RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
@@ -457,7 +472,7 @@ SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo *MFI = MF.getFrameInfo();
-  auto TRI = static_cast<const OR1KRegisterInfo*>(TM.getRegisterInfo());
+  auto TRI = static_cast<const OR1KRegisterInfo *>(TM.getRegisterInfo());
 
   CLI.IsTailCall = false;
 
@@ -506,11 +521,9 @@ SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
       int FI = MFI->CreateStackObject(Size, Align, false);
       SDValue Addr = DAG.getFrameIndex(FI, getPointerTy());
-      MemOpChains.push_back(DAG.getMemcpy(Chain, dl, Addr, ArgValue,
-                                          DAG.getConstant(Size, MVT::i32),
-                                          Align, false, false,
-                                          MachinePointerInfo(),
-                                          MachinePointerInfo()));
+      MemOpChains.push_back(DAG.getMemcpy(
+          Chain, dl, Addr, ArgValue, DAG.getConstant(Size, MVT::i32), Align,
+          false, false, MachinePointerInfo(), MachinePointerInfo()));
       ArgValue = Addr;
     }
 
@@ -545,8 +558,8 @@ SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   if (IsPIC) {
     SDValue GP = DAG.getGLOBAL_OFFSET_TABLE(MVT::i32);
-    Chain = DAG.getCopyToReg(Chain, dl, TRI->getGlobalBaseRegister(),
-                             GP, InFlag);
+    Chain =
+        DAG.getCopyToReg(Chain, dl, TRI->getGlobalBaseRegister(), GP, InFlag);
     InFlag = Chain.getValue(1);
   }
 
@@ -555,11 +568,11 @@ SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // Likewise ExternalSymbol -> TargetExternalSymbol.
   uint8_t OpFlag = IsPIC ? OR1KII::MO_PLT26 : OR1KII::MO_NO_FLAG;
   if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee))
-    Callee = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(),
-                                        0, OpFlag);
+    Callee =
+      DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0, OpFlag);
   else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee))
-    Callee = DAG.getTargetExternalSymbol(E->getSymbol(), getPointerTy(),
-                                         OpFlag);
+    Callee =
+        DAG.getTargetExternalSymbol(E->getSymbol(), getPointerTy(), OpFlag);
 
   SmallVector<SDValue, 16> Ops;
   Ops.push_back(Chain);
@@ -578,20 +591,18 @@ SDValue OR1KTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   Chain = DAG.getNode(OR1KISD::Call, dl, NodeTys, makeArrayRef(Ops));
   InFlag = Chain.getValue(1);
 
-  Chain = DAG.getCALLSEQ_END(Chain, SPAdjAmount,
-                             DAG.getIntPtrConstant(0, true), InFlag, dl);
+  Chain = DAG.getCALLSEQ_END(Chain, SPAdjAmount, DAG.getIntPtrConstant(0, true),
+                             InFlag, dl);
   InFlag = Chain.getValue(1);
 
-  return LowerCallResult(Chain, InFlag, CLI.CallConv, CLI.IsVarArg, CLI.Ins,
-                         dl, DAG, InVals);
+  return LowerCallResult(Chain, InFlag, CLI.CallConv, CLI.IsVarArg, CLI.Ins, dl,
+                         DAG, InVals);
 }
 
-
-SDValue OR1KTargetLowering::
-LowerCallResult(SDValue Chain, SDValue InFlag, CallingConv::ID CallConv,
-                bool IsVarArg, const SmallVectorImpl<ISD::InputArg> &Ins,
-                SDLoc dl, SelectionDAG &DAG,
-                SmallVectorImpl<SDValue> &InVals) const {
+SDValue OR1KTargetLowering::LowerCallResult(
+    SDValue Chain, SDValue InFlag, CallingConv::ID CallConv, bool IsVarArg,
+    const SmallVectorImpl<ISD::InputArg> &Ins, SDLoc dl, SelectionDAG &DAG,
+    SmallVectorImpl<SDValue> &InVals) const {
   SmallVector<CCValAssign, 16> RVLocs;
   OR1KCCState CCInfo(CallConv, IsVarArg, DAG.getMachineFunction(),
                      getTargetMachine(), RVLocs, *DAG.getContext());
@@ -599,8 +610,8 @@ LowerCallResult(SDValue Chain, SDValue InFlag, CallingConv::ID CallConv,
   CCInfo.AnalyzeCallResult(Ins, RetCC_OR1K32);
 
   for (const CCValAssign &VA : RVLocs) {
-    SDValue Value = DAG.getCopyFromReg(Chain, dl, VA.getLocReg(),
-                                       VA.getValVT(), InFlag);
+    SDValue Value =
+        DAG.getCopyFromReg(Chain, dl, VA.getLocReg(), VA.getValVT(), InFlag);
     Chain = Value.getValue(1);
     InFlag = Chain.getValue(2);
     InVals.push_back(Value);
@@ -654,7 +665,7 @@ SDValue OR1KTargetLowering::getSetFlag(SDLoc dl, SDValue LHS, SDValue RHS,
 
   if (VT == MVT::i32)
     return DAG.getNode(OR1KISD::SetFlag, dl, MVT::Glue, LHS, RHS,
-                               DAG.getCondCode(CC));
+                       DAG.getCondCode(CC));
 
   assert(VT == MVT::f32);
 
@@ -723,8 +734,8 @@ SDValue OR1KTargetLowering::LowerBR_CC(SDValue Op, SelectionDAG &DAG) const {
 SDValue OR1KTargetLowering::LowerSELECT_CC(SDValue Op,
                                            SelectionDAG &DAG) const {
   SDLoc dl(Op);
-  SDValue LHS  = Op.getOperand(0);
-  SDValue RHS  = Op.getOperand(1);
+  SDValue LHS = Op.getOperand(0);
+  SDValue RHS = Op.getOperand(1);
   SDValue ValT = Op.getOperand(2);
   SDValue ValF = Op.getOperand(3);
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(4))->get();
@@ -756,24 +767,24 @@ static SDValue LowerVASTART_NewABI(SDValue Op, SelectionDAG &DAG) {
   // Initialize GPR size.
   Value = DAG.getConstant(VAInfo.AllocatedGPR, MVT::i32);
   Ptr = VaListBasePtr;
-  Chain = DAG.getStore(Chain, dl, Value, Ptr, MachinePointerInfo(SV, 0),
-                       false, false, 0);
+  Chain = DAG.getStore(Chain, dl, Value, Ptr, MachinePointerInfo(SV, 0), false,
+                       false, 0);
 
   // Initialize stack area pointer.
   Value = DAG.getFrameIndex(VAInfo.StackAreaFI, PtrVT);
   Ptr = DAG.getNode(ISD::ADD, dl, PtrVT, VaListBasePtr,
                     DAG.getConstant(4, PtrVT));
-  Chain = DAG.getStore(Chain, dl, Value, Ptr, MachinePointerInfo(SV, 4),
-                       false, false, 0);
+  Chain = DAG.getStore(Chain, dl, Value, Ptr, MachinePointerInfo(SV, 4), false,
+                       false, 0);
 
   // Initialize regsave area pointer.
   Value = VAInfo.AllocatedGPR < 24
-            ? DAG.getFrameIndex(VAInfo.RegSaveAreaFI, PtrVT)
-            : DAG.getConstant(0, PtrVT);
+              ? DAG.getFrameIndex(VAInfo.RegSaveAreaFI, PtrVT)
+              : DAG.getConstant(0, PtrVT);
   Ptr = DAG.getNode(ISD::ADD, dl, PtrVT, VaListBasePtr,
                     DAG.getConstant(8, PtrVT));
-  Chain = DAG.getStore(Chain, dl, Value, Ptr, MachinePointerInfo(SV, 8),
-                       false, false, 0);
+  Chain = DAG.getStore(Chain, dl, Value, Ptr, MachinePointerInfo(SV, 8), false,
+                       false, 0);
 
   return Chain;
 }
@@ -812,9 +823,9 @@ static SDValue LowerVACOPY_NewABI(SDValue Op, SelectionDAG &DAG) {
   const Value *SrcSV = cast<SrcValueSDNode>(Op.getOperand(4))->getValue();
   SDLoc dl(Op);
 
-  return DAG.getMemcpy(Chain, dl, DstPtr, SrcPtr,
-                       DAG.getConstant(12, MVT::i32), 4, false, true,
-                       MachinePointerInfo(DstSV), MachinePointerInfo(SrcSV));
+  return DAG.getMemcpy(Chain, dl, DstPtr, SrcPtr, DAG.getConstant(12, MVT::i32),
+                       4, false, true, MachinePointerInfo(DstSV),
+                       MachinePointerInfo(SrcSV));
 }
 
 SDValue OR1KTargetLowering::LowerVACOPY(SDValue Op, SelectionDAG &DAG) const {
@@ -913,10 +924,10 @@ SDValue OR1KTargetLowering::LowerGlobalAddress(SDValue Op,
 
   // Load GlobalAddress from GOT
   if (IsPIC && !GV->hasLocalLinkage() && !GV->hasHiddenVisibility()) {
-    SDValue GA = DAG.getTargetGlobalAddress(GV, dl, PtrVT, Offset,
-                                            OR1KII::MO_GOT16);
-    return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(), GA,
-                       MachinePointerInfo(), false, false, false, 0);
+    SDValue GA =
+        DAG.getTargetGlobalAddress(GV, dl, PtrVT, Offset, OR1KII::MO_GOT16);
+    return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(), GA, MachinePointerInfo(),
+                       false, false, false, 0);
   }
 
   uint8_t OpFlagHi = IsPIC ? OR1KII::MO_GOTOFF_HI16 : OR1KII::MO_ABS_HI16;
@@ -972,8 +983,9 @@ SDValue OR1KTargetLowering::LowerJumpTable(SDValue Op,
   return Result;
 }
 
-MachineBasicBlock *OR1KTargetLowering::
-EmitInstrWithCustomInserter(MachineInstr *MI, MachineBasicBlock *BB) const {
+MachineBasicBlock *
+OR1KTargetLowering::EmitInstrWithCustomInserter(MachineInstr *MI,
+                                                MachineBasicBlock *BB) const {
   unsigned Opc = MI->getOpcode();
 
   const TargetInstrInfo &TII = *getTargetMachine().getInstrInfo();
@@ -1030,7 +1042,7 @@ EmitInstrWithCustomInserter(MachineInstr *MI, MachineBasicBlock *BB) const {
    .addReg(MI->getOperand(2).getReg()).addMBB(copy0MBB)
    .addReg(MI->getOperand(1).getReg()).addMBB(thisMBB);
 
-  MI->eraseFromParent();   // The pseudo instruction is gone now.
+  MI->eraseFromParent(); // The pseudo instruction is gone now.
   return BB;
 }
 
@@ -1045,8 +1057,8 @@ bool OR1KTargetLowering::isLegalICmpImmediate(int64_t Imm) const {
   return Subtarget.hasSFII() && isInt<16>(Imm);
 }
 
-bool
-OR1KTargetLowering::isLegalAddressingMode(const AddrMode& AM, Type* Ty) const {
+bool OR1KTargetLowering::isLegalAddressingMode(const AddrMode &AM,
+                                               Type *Ty) const {
   // No global is ever allowed as a base.
   if (AM.BaseGV)
     return false;
@@ -1068,14 +1080,15 @@ OR1KTargetLowering::isLegalAddressingMode(const AddrMode& AM, Type* Ty) const {
 //===----------------------------------------------------------------------===//
 //                       OR1K Inline Assembly Support
 //===----------------------------------------------------------------------===//
-std::pair<unsigned, const TargetRegisterClass*>
+std::pair<unsigned, const TargetRegisterClass *>
 OR1KTargetLowering::getRegForInlineAsmConstraint(const std::string &Constraint,
                                                  MVT VT) const {
   if (Constraint.size() == 1) {
     // GCC Constraint Letters
     switch (Constraint[0]) {
-    default: break;
-    case 'r':   // GENERAL_REGS
+    default:
+      break;
+    case 'r': // GENERAL_REGS
       return std::make_pair(0U, &OR1K::GPRRegClass);
     }
   }
@@ -1083,16 +1096,16 @@ OR1KTargetLowering::getRegForInlineAsmConstraint(const std::string &Constraint,
   return TargetLowering::getRegForInlineAsmConstraint(Constraint, VT);
 }
 
-/// Examine constraint type and operand type and determine a weight value.
+/// \brief Examine constraint type and operand type to determine a weight value.
 /// This object must already have been set up with the operand type
 /// and the current alternative constraint selected.
-TargetLowering::ConstraintWeight OR1KTargetLowering::
-getSingleConstraintMatchWeight(AsmOperandInfo &info,
-                               const char *constraint) const {
+TargetLowering::ConstraintWeight
+OR1KTargetLowering::getSingleConstraintMatchWeight(
+    AsmOperandInfo &info, const char *constraint) const {
   ConstraintWeight weight = CW_Invalid;
   Value *CallOperandVal = info.CallOperandVal;
-    // If we don't have a value, we can't do a match,
-    // but allow it at the lowest weight.
+  // If we don't have a value, we can't do a match,
+  // but allow it at the lowest weight.
   if (CallOperandVal == NULL)
     return CW_Default;
   // Look at the constraint type.
@@ -1114,20 +1127,22 @@ getSingleConstraintMatchWeight(AsmOperandInfo &info,
   return weight;
 }
 
-/// LowerAsmOperandForConstraint - Lower the specified operand into the Ops
-/// vector.  If it is invalid, don't add anything to Ops.
+/// \brief Lower the specified operand into the Ops vector.
+/// If it is invalid, don't add anything to Ops.
 void OR1KTargetLowering::LowerAsmOperandForConstraint(SDValue Op,
                                                       std::string &Constraint,
-                                                      std::vector<SDValue>&Ops,
+                                                      std::vector<SDValue> &Ops,
                                                       SelectionDAG &DAG) const {
   SDValue Result(0, 0);
 
   // Only support length 1 constraints for now.
-  if (Constraint.length() > 1) return;
+  if (Constraint.length() > 1)
+    return;
 
   char ConstraintLetter = Constraint[0];
   switch (ConstraintLetter) {
-  default: break; // This will fall through to the generic implementation
+  default:
+    break;  // This will fall through to the generic implementation
   case 'I': // Signed 16 bit constant
     // If this fails, the parent routine will give an error
     if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
