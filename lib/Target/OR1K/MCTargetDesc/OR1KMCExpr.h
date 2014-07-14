@@ -49,7 +49,7 @@ public:
 
   bool EvaluateAsRelocatableImpl(MCValue &, const MCAsmLayout *) const override;
 
-  void AddValueSymbols(MCAssembler *Asm) const override;
+  void visitUsedExpr(MCStreamer &Streamer) const override;
 
   const MCSection *FindAssociatedSection() const override {
     return getSubExpr()->FindAssociatedSection();

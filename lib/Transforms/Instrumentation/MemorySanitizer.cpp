@@ -511,7 +511,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   // The following flags disable parts of MSan instrumentation based on
   // blacklist contents and command-line options.
   bool InsertChecks;
-  bool LoadShadow;
+  bool PropagateShadow;
   bool PoisonStack;
   bool PoisonUndef;
   bool CheckReturnValue;
@@ -532,7 +532,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     bool SanitizeFunction = F.getAttributes().hasAttribute(
         AttributeSet::FunctionIndex, Attribute::SanitizeMemory);
     InsertChecks = SanitizeFunction;
-    LoadShadow = SanitizeFunction;
+    PropagateShadow = SanitizeFunction;
     PoisonStack = SanitizeFunction && ClPoisonStack;
     PoisonUndef = SanitizeFunction && ClPoisonUndef;
     // FIXME: Consider using SpecialCaseList to specify a list of functions that
@@ -569,7 +569,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
             ConvertedShadow, IRB.getIntNTy(8 * (1 << SizeIndex)));
         IRB.CreateCall3(Fn, ConvertedShadow2,
                         IRB.CreatePointerCast(Addr, IRB.getInt8PtrTy()),
-                        updateOrigin(Origin, IRB));
+                        Origin);
       } else {
         Value *Cmp = IRB.CreateICmpNE(
             ConvertedShadow, getCleanShadow(ConvertedShadow), "_mscmp");
@@ -721,8 +721,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       size_t NumValues = PN->getNumIncomingValues();
       for (size_t v = 0; v < NumValues; v++) {
         PNS->addIncoming(getShadow(PN, v), PN->getIncomingBlock(v));
-        if (PNO)
-          PNO->addIncoming(getOrigin(PN, v), PN->getIncomingBlock(v));
+        if (PNO) PNO->addIncoming(getOrigin(PN, v), PN->getIncomingBlock(v));
       }
     }
 
@@ -856,7 +855,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   /// \brief Set SV to be the shadow value for V.
   void setShadow(Value *V, Value *SV) {
     assert(!ShadowMap.count(V) && "Values may only have one shadow");
-    ShadowMap[V] = SV;
+    ShadowMap[V] = PropagateShadow ? SV : getCleanShadow(V);
   }
 
   /// \brief Set Origin to be the origin value for V.
@@ -908,6 +907,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   /// This function either returns the value set earlier with setShadow,
   /// or extracts if from ParamTLS (for function arguments).
   Value *getShadow(Value *V) {
+    if (!PropagateShadow) return getCleanShadow(V);
     if (Instruction *I = dyn_cast<Instruction>(V)) {
       // For instructions the shadow is already stored in the map.
       Value *Shadow = ShadowMap[V];
@@ -1075,7 +1075,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     IRBuilder<> IRB(I.getNextNode());
     Type *ShadowTy = getShadowTy(&I);
     Value *Addr = I.getPointerOperand();
-    if (LoadShadow) {
+    if (PropagateShadow) {
       Value *ShadowPtr = getShadowPtr(Addr, ShadowTy, IRB);
       setShadow(&I,
                 IRB.CreateAlignedLoad(ShadowPtr, I.getAlignment(), "_msld"));
@@ -1090,7 +1090,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       I.setOrdering(addAcquireOrdering(I.getOrdering()));
 
     if (MS.TrackOrigins) {
-      if (LoadShadow) {
+      if (PropagateShadow) {
         unsigned Alignment = std::max(kMinOriginAlignment, I.getAlignment());
         setOrigin(&I,
                   IRB.CreateAlignedLoad(getOriginPtr(Addr, IRB), Alignment));
@@ -1757,7 +1757,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     Value *Addr = I.getArgOperand(0);
 
     Type *ShadowTy = getShadowTy(&I);
-    if (LoadShadow) {
+    if (PropagateShadow) {
       Value *ShadowPtr = getShadowPtr(Addr, ShadowTy, IRB);
       // We don't know the pointer alignment (could be unaligned SSE load!).
       // Have to assume to worst case.
@@ -1770,7 +1770,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       insertShadowCheck(Addr, &I);
 
     if (MS.TrackOrigins) {
-      if (LoadShadow)
+      if (PropagateShadow)
         setOrigin(&I, IRB.CreateLoad(getOriginPtr(Addr, IRB)));
       else
         setOrigin(&I, getCleanOrigin());
@@ -2060,6 +2060,40 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     setOriginForNaryOp(I);
   }
 
+  // \brief Instrument sum-of-absolute-differencies intrinsic.
+  void handleVectorSadIntrinsic(IntrinsicInst &I) {
+    const unsigned SignificantBitsPerResultElement = 16;
+    bool isX86_MMX = I.getOperand(0)->getType()->isX86_MMXTy();
+    Type *ResTy = isX86_MMX ? IntegerType::get(*MS.C, 64) : I.getType();
+    unsigned ZeroBitsPerResultElement =
+        ResTy->getScalarSizeInBits() - SignificantBitsPerResultElement;
+
+    IRBuilder<> IRB(&I);
+    Value *S = IRB.CreateOr(getShadow(&I, 0), getShadow(&I, 1));
+    S = IRB.CreateBitCast(S, ResTy);
+    S = IRB.CreateSExt(IRB.CreateICmpNE(S, Constant::getNullValue(ResTy)),
+                       ResTy);
+    S = IRB.CreateLShr(S, ZeroBitsPerResultElement);
+    S = IRB.CreateBitCast(S, getShadowTy(&I));
+    setShadow(&I, S);
+    setOriginForNaryOp(I);
+  }
+
+  // \brief Instrument multiply-add intrinsic.
+  void handleVectorPmaddIntrinsic(IntrinsicInst &I,
+                                  unsigned EltSizeInBits = 0) {
+    bool isX86_MMX = I.getOperand(0)->getType()->isX86_MMXTy();
+    Type *ResTy = isX86_MMX ? getMMXVectorTy(EltSizeInBits * 2) : I.getType();
+    IRBuilder<> IRB(&I);
+    Value *S = IRB.CreateOr(getShadow(&I, 0), getShadow(&I, 1));
+    S = IRB.CreateBitCast(S, ResTy);
+    S = IRB.CreateSExt(IRB.CreateICmpNE(S, Constant::getNullValue(ResTy)),
+                       ResTy);
+    S = IRB.CreateBitCast(S, getShadowTy(&I));
+    setShadow(&I, S);
+    setOriginForNaryOp(I);
+  }
+
   void visitIntrinsicInst(IntrinsicInst &I) {
     switch (I.getIntrinsicID()) {
     case llvm::Intrinsic::bswap:
@@ -2196,6 +2230,27 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       handleVectorPackIntrinsic(I, 32);
       break;
 
+    case llvm::Intrinsic::x86_mmx_psad_bw:
+    case llvm::Intrinsic::x86_sse2_psad_bw:
+    case llvm::Intrinsic::x86_avx2_psad_bw:
+      handleVectorSadIntrinsic(I);
+      break;
+
+    case llvm::Intrinsic::x86_sse2_pmadd_wd:
+    case llvm::Intrinsic::x86_avx2_pmadd_wd:
+    case llvm::Intrinsic::x86_ssse3_pmadd_ub_sw_128:
+    case llvm::Intrinsic::x86_avx2_pmadd_ub_sw:
+      handleVectorPmaddIntrinsic(I);
+      break;
+
+    case llvm::Intrinsic::x86_ssse3_pmadd_ub_sw:
+      handleVectorPmaddIntrinsic(I, 8);
+      break;
+
+    case llvm::Intrinsic::x86_mmx_pmadd_wd:
+      handleVectorPmaddIntrinsic(I, 16);
+      break;
+
     default:
       if (!handleUnknownIntrinsic(I))
         visitInstruction(I);
@@ -2216,12 +2271,6 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
         visitInstruction(I);
         return;
       }
-
-      // Allow only tail calls with the same types, otherwise
-      // we may have a false positive: shadow for a non-void RetVal
-      // will get propagated to a void RetVal.
-      if (Call->isTailCall() && Call->getType() != Call->getParent()->getType())
-        Call->setTailCall(false);
 
       assert(!isa<IntrinsicInst>(&I) && "intrinsics are handled elsewhere");
 
@@ -2345,6 +2394,11 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
 
   void visitPHINode(PHINode &I) {
     IRBuilder<> IRB(&I);
+    if (!PropagateShadow) {
+      setShadow(&I, getCleanShadow(&I));
+      return;
+    }
+
     ShadowPHINodes.push_back(&I);
     setShadow(&I, IRB.CreatePHI(getShadowTy(&I), I.getNumIncomingValues(),
                                 "_msphi_s"));

@@ -16,6 +16,7 @@
 #include "MipsAnalyzeImmediate.h"
 #include "MipsMachineFunction.h"
 #include "MipsSEInstrInfo.h"
+#include "MipsSubtarget.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -257,6 +258,9 @@ bool ExpandPseudo::expandCopyACC(MachineBasicBlock &MBB, Iter I,
   return true;
 }
 
+MipsSEFrameLowering::MipsSEFrameLowering(const MipsSubtarget &STI)
+    : MipsFrameLowering(STI, STI.stackAlignment()) {}
+
 unsigned MipsSEFrameLowering::ehDataReg(unsigned I) const {
   static const unsigned EhDataReg[] = {
     Mips::A0, Mips::A1, Mips::A2, Mips::A3
@@ -337,6 +341,22 @@ void MipsSEFrameLowering::emitPrologue(MachineFunction &MF) const {
 
         CFIIndex = MMI.addFrameInst(
             MCCFIInstruction::createOffset(nullptr, Reg1, Offset + 4));
+        BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
+            .addCFIIndex(CFIIndex);
+      } else if (Mips::FGR64RegClass.contains(Reg)) {
+        unsigned Reg0 = MRI->getDwarfRegNum(Reg, true);
+        unsigned Reg1 = MRI->getDwarfRegNum(Reg, true) + 1;
+
+        if (!STI.isLittle())
+          std::swap(Reg0, Reg1);
+
+        unsigned CFIIndex = MMI.addFrameInst(
+          MCCFIInstruction::createOffset(nullptr, Reg0, Offset));
+        BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
+            .addCFIIndex(CFIIndex);
+
+        CFIIndex = MMI.addFrameInst(
+          MCCFIInstruction::createOffset(nullptr, Reg1, Offset + 4));
         BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
             .addCFIIndex(CFIIndex);
       } else {

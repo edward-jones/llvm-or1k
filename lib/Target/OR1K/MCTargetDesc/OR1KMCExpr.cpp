@@ -98,31 +98,6 @@ bool OR1KMCExpr::EvaluateAsRelocatableImpl(MCValue &Res,
   return getSubExpr()->EvaluateAsRelocatable(Res, Layout);
 }
 
-static void AddValueSymbolsImpl(const MCExpr *Value, MCAssembler *Asm) {
-  switch (Value->getKind()) {
-  case MCExpr::Target:
-    llvm_unreachable("Can't handle nested target expr!");
-
-  case MCExpr::Constant:
-    break;
-
-  case MCExpr::Binary: {
-    const MCBinaryExpr *BE = cast<MCBinaryExpr>(Value);
-    AddValueSymbolsImpl(BE->getLHS(), Asm);
-    AddValueSymbolsImpl(BE->getRHS(), Asm);
-    break;
-  }
-
-  case MCExpr::SymbolRef:
-    Asm->getOrCreateSymbolData(cast<MCSymbolRefExpr>(Value)->getSymbol());
-    break;
-
-  case MCExpr::Unary:
-    AddValueSymbolsImpl(cast<MCUnaryExpr>(Value)->getSubExpr(), Asm);
-    break;
-  }
-}
-
-void OR1KMCExpr::AddValueSymbols(MCAssembler *Asm) const {
-  AddValueSymbolsImpl(getSubExpr(), Asm);
+void OR1KMCExpr::visitUsedExpr(MCStreamer &Streamer) const {
+  Streamer.visitUsedExpr(*getSubExpr());
 }

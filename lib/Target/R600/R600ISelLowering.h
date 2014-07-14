@@ -59,7 +59,10 @@ private:
   SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFPTOUINT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerLOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerBRCOND(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerTrig(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSHLParts(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSRXParts(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue stackPtrToRegIndex(SDValue Ptr, unsigned StackWidth,
                                           SelectionDAG &DAG) const;

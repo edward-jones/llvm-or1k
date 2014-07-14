@@ -773,7 +773,6 @@ const char *PPCTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case PPCISD::Hi:              return "PPCISD::Hi";
   case PPCISD::Lo:              return "PPCISD::Lo";
   case PPCISD::TOC_ENTRY:       return "PPCISD::TOC_ENTRY";
-  case PPCISD::TOC_RESTORE:     return "PPCISD::TOC_RESTORE";
   case PPCISD::LOAD:            return "PPCISD::LOAD";
   case PPCISD::LOAD_TOC:        return "PPCISD::LOAD_TOC";
   case PPCISD::DYNALLOC:        return "PPCISD::DYNALLOC";
@@ -1937,7 +1936,8 @@ SDValue PPCTargetLowering::LowerINIT_TRAMPOLINE(SDValue Op,
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(dl).setChain(Chain)
     .setCallee(CallingConv::C, Type::getVoidTy(*DAG.getContext()),
-               DAG.getExternalSymbol("__trampoline_setup", PtrVT), &Args, 0);
+               DAG.getExternalSymbol("__trampoline_setup", PtrVT),
+               std::move(Args), 0);
 
   std::pair<SDValue, SDValue> CallResult = LowerCallTo(CLI);
   return CallResult.second;
@@ -2132,6 +2132,43 @@ static unsigned CalculateStackSlotSize(EVT ArgVT, ISD::ArgFlagsTy Flags,
   return ArgSize;
 }
 
+/// CalculateStackSlotAlignment - Calculates the alignment of this argument
+/// on the stack.
+static unsigned CalculateStackSlotAlignment(EVT ArgVT, ISD::ArgFlagsTy Flags,
+                                            unsigned PtrByteSize) {
+  unsigned Align = PtrByteSize;
+
+  // Altivec parameters are padded to a 16 byte boundary.
+  if (ArgVT == MVT::v4f32 || ArgVT == MVT::v4i32 ||
+      ArgVT == MVT::v8i16 || ArgVT == MVT::v16i8 ||
+      ArgVT == MVT::v2f64 || ArgVT == MVT::v2i64)
+    Align = 16;
+
+  // ByVal parameters are aligned as requested.
+  if (Flags.isByVal()) {
+    unsigned BVAlign = Flags.getByValAlign();
+    if (BVAlign > PtrByteSize) {
+      if (BVAlign % PtrByteSize != 0)
+          llvm_unreachable(
+            "ByVal alignment is not a multiple of the pointer size");
+
+      Align = BVAlign;
+    }
+  }
+
+  return Align;
+}
+
+/// EnsureStackAlignment - Round stack frame size up from NumBytes to
+/// ensure minimum alignment required for target.
+static unsigned EnsureStackAlignment(const TargetMachine &Target,
+                                     unsigned NumBytes) {
+  unsigned TargetAlign = Target.getFrameLowering()->getStackAlignment();
+  unsigned AlignMask = TargetAlign - 1;
+  NumBytes = (NumBytes + AlignMask) & ~AlignMask;
+  return NumBytes;
+}
+
 SDValue
 PPCTargetLowering::LowerFormalArguments(SDValue Chain,
                                         CallingConv::ID CallConv, bool isVarArg,
@@ -2207,7 +2244,8 @@ PPCTargetLowering::LowerFormalArguments_32SVR4(
                  getTargetMachine(), ArgLocs, *DAG.getContext());
 
   // Reserve space for the linkage area on the stack.
-  CCInfo.AllocateStack(PPCFrameLowering::getLinkageSize(false, false), PtrByteSize);
+  unsigned LinkageSize = PPCFrameLowering::getLinkageSize(false, false);
+  CCInfo.AllocateStack(LinkageSize, PtrByteSize);
 
   CCInfo.AnalyzeFormalArguments(Ins, CC_PPC32_SVR4);
 
@@ -2286,23 +2324,14 @@ PPCTargetLowering::LowerFormalArguments_32SVR4(
 
   // Area that is at least reserved in the caller of this function.
   unsigned MinReservedArea = CCByValInfo.getNextStackOffset();
+  MinReservedArea = std::max(MinReservedArea, LinkageSize);
 
   // Set the size that is at least reserved in caller of this function.  Tail
   // call optimized function's reserved stack space needs to be aligned so that
   // taking the difference between two stack areas will result in an aligned
   // stack.
-  PPCFunctionInfo *FI = MF.getInfo<PPCFunctionInfo>();
-
-  MinReservedArea =
-    std::max(MinReservedArea,
-             PPCFrameLowering::getMinCallFrameSize(false, false));
-
-  unsigned TargetAlign = DAG.getMachineFunction().getTarget().getFrameLowering()->
-    getStackAlignment();
-  unsigned AlignMask = TargetAlign-1;
-  MinReservedArea = (MinReservedArea + AlignMask) & ~AlignMask;
-
-  FI->setMinReservedArea(MinReservedArea);
+  MinReservedArea = EnsureStackAlignment(MF.getTarget(), MinReservedArea);
+  FuncInfo->setMinReservedArea(MinReservedArea);
 
   SmallVector<SDValue, 8> MemOps;
 
@@ -2398,32 +2427,6 @@ PPCTargetLowering::extendArgForPPC64(ISD::ArgFlagsTy Flags, EVT ObjectVT,
   return DAG.getNode(ISD::TRUNCATE, dl, ObjectVT, ArgVal);
 }
 
-// Set the size that is at least reserved in caller of this function.  Tail
-// call optimized functions' reserved stack space needs to be aligned so that
-// taking the difference between two stack areas will result in an aligned
-// stack.
-void
-PPCTargetLowering::setMinReservedArea(MachineFunction &MF, SelectionDAG &DAG,
-                                      unsigned nAltivecParamsAtEnd,
-                                      unsigned MinReservedArea,
-                                      bool isPPC64) const {
-  PPCFunctionInfo *FI = MF.getInfo<PPCFunctionInfo>();
-  // Add the Altivec parameters at the end, if needed.
-  if (nAltivecParamsAtEnd) {
-    MinReservedArea = ((MinReservedArea+15)/16)*16;
-    MinReservedArea += 16*nAltivecParamsAtEnd;
-  }
-  MinReservedArea =
-    std::max(MinReservedArea,
-             PPCFrameLowering::getMinCallFrameSize(isPPC64, true));
-  unsigned TargetAlign
-    = DAG.getMachineFunction().getTarget().getFrameLowering()->
-        getStackAlignment();
-  unsigned AlignMask = TargetAlign-1;
-  MinReservedArea = (MinReservedArea + AlignMask) & ~AlignMask;
-  FI->setMinReservedArea(MinReservedArea);
-}
-
 SDValue
 PPCTargetLowering::LowerFormalArguments_64SVR4(
                                       SDValue Chain,
@@ -2434,6 +2437,7 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
                                       SmallVectorImpl<SDValue> &InVals) const {
   // TODO: add description of PPC stack frame format, or at least some docs.
   //
+  bool isLittleEndian = Subtarget.isLittleEndian();
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo *MFI = MF.getFrameInfo();
   PPCFunctionInfo *FuncInfo = MF.getInfo<PPCFunctionInfo>();
@@ -2444,9 +2448,8 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
                        (CallConv == CallingConv::Fast));
   unsigned PtrByteSize = 8;
 
-  unsigned ArgOffset = PPCFrameLowering::getLinkageSize(true, true);
-  // Area that is at least reserved in caller of this function.
-  unsigned MinReservedArea = ArgOffset;
+  unsigned LinkageSize = PPCFrameLowering::getLinkageSize(true, false);
+  unsigned ArgOffset = LinkageSize;
 
   static const MCPhysReg GPR[] = {
     PPC::X3, PPC::X4, PPC::X5, PPC::X6,
@@ -2468,14 +2471,13 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
   const unsigned Num_FPR_Regs = 13;
   const unsigned Num_VR_Regs  = array_lengthof(VR);
 
-  unsigned GPR_idx = 0, FPR_idx = 0, VR_idx = 0;
+  unsigned GPR_idx, FPR_idx = 0, VR_idx = 0;
 
   // Add DAG nodes to load the arguments or copy them out of registers.  On
   // entry to a function on PPC, the arguments start after the linkage area,
   // although the first ones are often in registers.
 
   SmallVector<SDValue, 8> MemOps;
-  unsigned nAltivecParamsAtEnd = 0;
   Function::const_arg_iterator FuncArg = MF.getFunction()->arg_begin();
   unsigned CurArgIdx = 0;
   for (unsigned ArgNo = 0, e = Ins.size(); ArgNo != e; ++ArgNo) {
@@ -2488,24 +2490,15 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
     std::advance(FuncArg, Ins[ArgNo].OrigArgIndex - CurArgIdx);
     CurArgIdx = Ins[ArgNo].OrigArgIndex;
 
+    /* Respect alignment of argument on the stack.  */
+    unsigned Align =
+      CalculateStackSlotAlignment(ObjectVT, Flags, PtrByteSize);
+    ArgOffset = ((ArgOffset + Align - 1) / Align) * Align;
     unsigned CurArgOffset = ArgOffset;
 
-    // Varargs or 64 bit Altivec parameters are padded to a 16 byte boundary.
-    if (ObjectVT==MVT::v4f32 || ObjectVT==MVT::v4i32 ||
-        ObjectVT==MVT::v8i16 || ObjectVT==MVT::v16i8 ||
-        ObjectVT==MVT::v2f64 || ObjectVT==MVT::v2i64) {
-      if (isVarArg) {
-        MinReservedArea = ((MinReservedArea+15)/16)*16;
-        MinReservedArea += CalculateStackSlotSize(ObjectVT,
-                                                  Flags,
-                                                  PtrByteSize);
-      } else
-        nAltivecParamsAtEnd++;
-    } else
-      // Calculate min reserved area.
-      MinReservedArea += CalculateStackSlotSize(Ins[ArgNo].VT,
-                                                Flags,
-                                                PtrByteSize);
+    /* Compute GPR index associated with argument offset.  */
+    GPR_idx = (ArgOffset - LinkageSize) / PtrByteSize;
+    GPR_idx = std::min(GPR_idx, Num_GPR_Regs);
 
     // FIXME the codegen can be much improved in some cases.
     // We do not have to keep everything in memory.
@@ -2527,14 +2520,8 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
         continue;
       }
 
-      unsigned BVAlign = Flags.getByValAlign();
-      if (BVAlign > 8) {
-        ArgOffset = ((ArgOffset+BVAlign-1)/BVAlign)*BVAlign;
-        CurArgOffset = ArgOffset;
-      }
-
       // All aggregates smaller than 8 bytes must be passed right-justified.
-      if (ObjSize < PtrByteSize)
+      if (ObjSize < PtrByteSize && !isLittleEndian)
         CurArgOffset = CurArgOffset + (PtrByteSize - ObjSize);
       // The value of the object is its address.
       int FI = MFI->CreateFixedObject(ObjSize, CurArgOffset, true);
@@ -2568,7 +2555,6 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
           }
 
           MemOps.push_back(Store);
-          ++GPR_idx;
         }
         // Whether we copied from a register or not, advance the offset
         // into the parameter save area by a full doubleword.
@@ -2613,8 +2599,6 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
           // PPC64 passes i8, i16, and i32 values in i64 registers. Promote
           // value to MVT::i64 and then truncate to the correct register size.
           ArgVal = extendArgForPPC64(Flags, ObjectVT, DAG, ArgVal, dl);
-
-        ++GPR_idx;
       } else {
         needsLoad = true;
         ArgSize = PtrByteSize;
@@ -2624,11 +2608,6 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
 
     case MVT::f32:
     case MVT::f64:
-      // Every 8 bytes of argument space consumes one of the GPRs available for
-      // argument passing.
-      if (GPR_idx != Num_GPR_Regs) {
-        ++GPR_idx;
-      }
       if (FPR_idx != Num_FPR_Regs) {
         unsigned VReg;
 
@@ -2654,39 +2633,25 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
     case MVT::v16i8:
     case MVT::v2f64:
     case MVT::v2i64:
-      // Note that vector arguments in registers don't reserve stack space,
-      // except in varargs functions.
       if (VR_idx != Num_VR_Regs) {
         unsigned VReg = (ObjectVT == MVT::v2f64 || ObjectVT == MVT::v2i64) ?
                         MF.addLiveIn(VSRH[VR_idx], &PPC::VSHRCRegClass) :
                         MF.addLiveIn(VR[VR_idx], &PPC::VRRCRegClass);
         ArgVal = DAG.getCopyFromReg(Chain, dl, VReg, ObjectVT);
-        if (isVarArg) {
-          while ((ArgOffset % 16) != 0) {
-            ArgOffset += PtrByteSize;
-            if (GPR_idx != Num_GPR_Regs)
-              GPR_idx++;
-          }
-          ArgOffset += 16;
-          GPR_idx = std::min(GPR_idx+4, Num_GPR_Regs); // FIXME correct for ppc64?
-        }
         ++VR_idx;
       } else {
-        // Vectors are aligned.
-        ArgOffset = ((ArgOffset+15)/16)*16;
-        CurArgOffset = ArgOffset;
-        ArgOffset += 16;
         needsLoad = true;
       }
+      ArgOffset += 16;
       break;
     }
 
     // We need to load the argument to a virtual register if we determined
     // above that we ran out of physical registers of the appropriate type.
     if (needsLoad) {
-      int FI = MFI->CreateFixedObject(ObjSize,
-                                      CurArgOffset + (ArgSize - ObjSize),
-                                      isImmutable);
+      if (ObjSize < ArgSize && !isLittleEndian)
+        CurArgOffset += ArgSize - ObjSize;
+      int FI = MFI->CreateFixedObject(ObjSize, CurArgOffset, isImmutable);
       SDValue FIN = DAG.getFrameIndex(FI, PtrVT);
       ArgVal = DAG.getLoad(ObjectVT, dl, Chain, FIN, MachinePointerInfo(),
                            false, false, false, 0);
@@ -2695,11 +2660,16 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
     InVals.push_back(ArgVal);
   }
 
+  // Area that is at least reserved in the caller of this function.
+  unsigned MinReservedArea;
+  MinReservedArea = std::max(ArgOffset, LinkageSize + 8 * PtrByteSize);
+
   // Set the size that is at least reserved in caller of this function.  Tail
   // call optimized functions' reserved stack space needs to be aligned so that
   // taking the difference between two stack areas will result in an aligned
   // stack.
-  setMinReservedArea(MF, DAG, nAltivecParamsAtEnd, MinReservedArea, true);
+  MinReservedArea = EnsureStackAlignment(MF.getTarget(), MinReservedArea);
+  FuncInfo->setMinReservedArea(MinReservedArea);
 
   // If the function takes variable number of arguments, make a frame index for
   // the start of the first vararg value... for expansion of llvm.va_start.
@@ -2713,7 +2683,8 @@ PPCTargetLowering::LowerFormalArguments_64SVR4(
     // If this function is vararg, store any remaining integer argument regs
     // to their spots on the stack so that they may be loaded by deferencing the
     // result of va_next.
-    for (; GPR_idx != Num_GPR_Regs; ++GPR_idx) {
+    for (GPR_idx = (ArgOffset - LinkageSize) / PtrByteSize;
+         GPR_idx < Num_GPR_Regs; ++GPR_idx) {
       unsigned VReg = MF.addLiveIn(GPR[GPR_idx], &PPC::G8RCRegClass);
       SDValue Val = DAG.getCopyFromReg(Chain, dl, VReg, PtrVT);
       SDValue Store = DAG.getStore(Val.getValue(1), dl, Val, FIN,
@@ -2752,7 +2723,8 @@ PPCTargetLowering::LowerFormalArguments_Darwin(
                        (CallConv == CallingConv::Fast));
   unsigned PtrByteSize = isPPC64 ? 8 : 4;
 
-  unsigned ArgOffset = PPCFrameLowering::getLinkageSize(isPPC64, true);
+  unsigned LinkageSize = PPCFrameLowering::getLinkageSize(isPPC64, true);
+  unsigned ArgOffset = LinkageSize;
   // Area that is at least reserved in caller of this function.
   unsigned MinReservedArea = ArgOffset;
 
@@ -3043,11 +3015,21 @@ PPCTargetLowering::LowerFormalArguments_Darwin(
     InVals.push_back(ArgVal);
   }
 
+  // Allow for Altivec parameters at the end, if needed.
+  if (nAltivecParamsAtEnd) {
+    MinReservedArea = ((MinReservedArea+15)/16)*16;
+    MinReservedArea += 16*nAltivecParamsAtEnd;
+  }
+
+  // Area that is at least reserved in the caller of this function.
+  MinReservedArea = std::max(MinReservedArea, LinkageSize + 8 * PtrByteSize);
+
   // Set the size that is at least reserved in caller of this function.  Tail
   // call optimized functions' reserved stack space needs to be aligned so that
   // taking the difference between two stack areas will result in an aligned
   // stack.
-  setMinReservedArea(MF, DAG, nAltivecParamsAtEnd, MinReservedArea, isPPC64);
+  MinReservedArea = EnsureStackAlignment(MF.getTarget(), MinReservedArea);
+  FuncInfo->setMinReservedArea(MinReservedArea);
 
   // If the function takes variable number of arguments, make a frame index for
   // the start of the first vararg value... for expansion of llvm.va_start.
@@ -3084,75 +3066,6 @@ PPCTargetLowering::LowerFormalArguments_Darwin(
     Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, MemOps);
 
   return Chain;
-}
-
-/// CalculateParameterAndLinkageAreaSize - Get the size of the parameter plus
-/// linkage area for the Darwin ABI, or the 64-bit SVR4 ABI.
-static unsigned
-CalculateParameterAndLinkageAreaSize(SelectionDAG &DAG,
-                                     bool isPPC64,
-                                     bool isVarArg,
-                                     unsigned CC,
-                                     const SmallVectorImpl<ISD::OutputArg>
-                                       &Outs,
-                                     const SmallVectorImpl<SDValue> &OutVals,
-                                     unsigned &nAltivecParamsAtEnd) {
-  // Count how many bytes are to be pushed on the stack, including the linkage
-  // area, and parameter passing area.  We start with 24/48 bytes, which is
-  // prereserved space for [SP][CR][LR][3 x unused].
-  unsigned NumBytes = PPCFrameLowering::getLinkageSize(isPPC64, true);
-  unsigned NumOps = Outs.size();
-  unsigned PtrByteSize = isPPC64 ? 8 : 4;
-
-  // Add up all the space actually used.
-  // In 32-bit non-varargs calls, Altivec parameters all go at the end; usually
-  // they all go in registers, but we must reserve stack space for them for
-  // possible use by the caller.  In varargs or 64-bit calls, parameters are
-  // assigned stack space in order, with padding so Altivec parameters are
-  // 16-byte aligned.
-  nAltivecParamsAtEnd = 0;
-  for (unsigned i = 0; i != NumOps; ++i) {
-    ISD::ArgFlagsTy Flags = Outs[i].Flags;
-    EVT ArgVT = Outs[i].VT;
-    // Varargs Altivec parameters are padded to a 16 byte boundary.
-    if (ArgVT==MVT::v4f32 || ArgVT==MVT::v4i32 ||
-        ArgVT==MVT::v8i16 || ArgVT==MVT::v16i8 ||
-        ArgVT==MVT::v2f64 || ArgVT==MVT::v2i64) {
-      if (!isVarArg && !isPPC64) {
-        // Non-varargs Altivec parameters go after all the non-Altivec
-        // parameters; handle those later so we know how much padding we need.
-        nAltivecParamsAtEnd++;
-        continue;
-      }
-      // Varargs and 64-bit Altivec parameters are padded to 16 byte boundary.
-      NumBytes = ((NumBytes+15)/16)*16;
-    }
-    NumBytes += CalculateStackSlotSize(ArgVT, Flags, PtrByteSize);
-  }
-
-   // Allow for Altivec parameters at the end, if needed.
-  if (nAltivecParamsAtEnd) {
-    NumBytes = ((NumBytes+15)/16)*16;
-    NumBytes += 16*nAltivecParamsAtEnd;
-  }
-
-  // The prolog code of the callee may store up to 8 GPR argument registers to
-  // the stack, allowing va_start to index over them in memory if its varargs.
-  // Because we cannot tell if this is needed on the caller side, we have to
-  // conservatively assume that it is needed.  As such, make sure we have at
-  // least enough stack space for the caller to store the 8 GPRs.
-  NumBytes = std::max(NumBytes,
-                      PPCFrameLowering::getMinCallFrameSize(isPPC64, true));
-
-  // Tail call needs the stack to be aligned.
-  if (CC == CallingConv::Fast && DAG.getTarget().Options.GuaranteedTailCallOpt){
-    unsigned TargetAlign = DAG.getMachineFunction().getTarget().
-      getFrameLowering()->getStackAlignment();
-    unsigned AlignMask = TargetAlign-1;
-    NumBytes = (NumBytes + AlignMask) & ~AlignMask;
-  }
-
-  return NumBytes;
 }
 
 /// CalculateTailCallSPDiff - Get the amount the stack pointer has to be
@@ -3431,11 +3344,12 @@ unsigned PrepareCall(SelectionDAG &DAG, SDValue &Callee, SDValue &InFlag,
   unsigned CallOpc = PPCISD::CALL;
 
   bool needIndirectCall = true;
-  if (SDNode *Dest = isBLACompatibleAddress(Callee, DAG)) {
-    // If this is an absolute destination address, use the munged value.
-    Callee = SDValue(Dest, 0);
-    needIndirectCall = false;
-  }
+  if (!isSVR4ABI || !isPPC64)
+    if (SDNode *Dest = isBLACompatibleAddress(Callee, DAG)) {
+      // If this is an absolute destination address, use the munged value.
+      Callee = SDValue(Dest, 0);
+      needIndirectCall = false;
+    }
 
   if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
     // XXX Work around for http://llvm.org/bugs/show_bug.cgi?id=5201
@@ -3543,8 +3457,10 @@ unsigned PrepareCall(SelectionDAG &DAG, SDValue &Callee, SDValue &InFlag,
       // additional register being allocated and an unnecessary move instruction
       // being generated.
       VTs = DAG.getVTList(MVT::Other, MVT::Glue);
+      SDValue TOCOff = DAG.getIntPtrConstant(8);
+      SDValue AddTOC = DAG.getNode(ISD::ADD, dl, MVT::i64, Callee, TOCOff);
       SDValue LoadTOCPtr = DAG.getNode(PPCISD::LOAD_TOC, dl, VTs, Chain,
-                                       Callee, InFlag);
+                                       AddTOC, InFlag);
       Chain = LoadTOCPtr.getValue(0);
       InFlag = LoadTOCPtr.getValue(1);
 
@@ -3728,7 +3644,12 @@ PPCTargetLowering::FinishCall(CallingConv::ID CallConv, SDLoc dl,
 
   if (needsTOCRestore) {
     SDVTList VTs = DAG.getVTList(MVT::Other, MVT::Glue);
-    Chain = DAG.getNode(PPCISD::TOC_RESTORE, dl, VTs, Chain, InFlag);
+    EVT PtrVT = DAG.getTargetLoweringInfo().getPointerTy();
+    SDValue StackPtr = DAG.getRegister(PPC::X1, PtrVT);
+    unsigned TOCSaveOffset = PPCFrameLowering::getTOCSaveOffset();
+    SDValue TOCOff = DAG.getIntPtrConstant(TOCSaveOffset);
+    SDValue AddTOC = DAG.getNode(ISD::ADD, dl, MVT::i64, StackPtr, TOCOff);
+    Chain = DAG.getNode(PPCISD::LOAD_TOC, dl, VTs, Chain, AddTOC, InFlag);
     InFlag = Chain.getValue(1);
   }
 
@@ -4027,6 +3948,7 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
                                     SDLoc dl, SelectionDAG &DAG,
                                     SmallVectorImpl<SDValue> &InVals) const {
 
+  bool isLittleEndian = Subtarget.isLittleEndian();
   unsigned NumOps = Outs.size();
 
   EVT PtrVT = DAG.getTargetLoweringInfo().getPointerTy();
@@ -4043,16 +3965,37 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
       CallConv == CallingConv::Fast)
     MF.getInfo<PPCFunctionInfo>()->setHasFastCall();
 
-  unsigned nAltivecParamsAtEnd = 0;
-
   // Count how many bytes are to be pushed on the stack, including the linkage
   // area, and parameter passing area.  We start with at least 48 bytes, which
   // is reserved space for [SP][CR][LR][3 x unused].
-  // NOTE: For PPC64, nAltivecParamsAtEnd always remains zero as a result
-  // of this call.
-  unsigned NumBytes =
-    CalculateParameterAndLinkageAreaSize(DAG, true, isVarArg, CallConv,
-                                         Outs, OutVals, nAltivecParamsAtEnd);
+  unsigned LinkageSize = PPCFrameLowering::getLinkageSize(true, false);
+  unsigned NumBytes = LinkageSize;
+
+  // Add up all the space actually used.
+  for (unsigned i = 0; i != NumOps; ++i) {
+    ISD::ArgFlagsTy Flags = Outs[i].Flags;
+    EVT ArgVT = Outs[i].VT;
+
+    /* Respect alignment of argument on the stack.  */
+    unsigned Align = CalculateStackSlotAlignment(ArgVT, Flags, PtrByteSize);
+    NumBytes = ((NumBytes + Align - 1) / Align) * Align;
+
+    NumBytes += CalculateStackSlotSize(ArgVT, Flags, PtrByteSize);
+  }
+
+  unsigned NumBytesActuallyUsed = NumBytes;
+
+  // The prolog code of the callee may store up to 8 GPR argument registers to
+  // the stack, allowing va_start to index over them in memory if its varargs.
+  // Because we cannot tell if this is needed on the caller side, we have to
+  // conservatively assume that it is needed.  As such, make sure we have at
+  // least enough stack space for the caller to store the 8 GPRs.
+  NumBytes = std::max(NumBytes, LinkageSize + 8 * PtrByteSize);
+
+  // Tail call needs the stack to be aligned.
+  if (getTargetMachine().Options.GuaranteedTailCallOpt &&
+      CallConv == CallingConv::Fast)
+    NumBytes = EnsureStackAlignment(MF.getTarget(), NumBytes);
 
   // Calculate by how many bytes the stack has to be adjusted in case of tail
   // call optimization.
@@ -4084,8 +4027,8 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
   // memory.  Also, if this is a vararg function, floating point operations
   // must be stored to our stack, and loaded into integer regs as well, if
   // any integer regs are available for argument passing.
-  unsigned ArgOffset = PPCFrameLowering::getLinkageSize(true, true);
-  unsigned GPR_idx = 0, FPR_idx = 0, VR_idx = 0;
+  unsigned ArgOffset = LinkageSize;
+  unsigned GPR_idx, FPR_idx = 0, VR_idx = 0;
 
   static const MCPhysReg GPR[] = {
     PPC::X3, PPC::X4, PPC::X5, PPC::X6,
@@ -4113,6 +4056,15 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
   for (unsigned i = 0; i != NumOps; ++i) {
     SDValue Arg = OutVals[i];
     ISD::ArgFlagsTy Flags = Outs[i].Flags;
+
+    /* Respect alignment of argument on the stack.  */
+    unsigned Align =
+      CalculateStackSlotAlignment(Outs[i].VT, Flags, PtrByteSize);
+    ArgOffset = ((ArgOffset + Align - 1) / Align) * Align;
+
+    /* Compute GPR index associated with argument offset.  */
+    GPR_idx = (ArgOffset - LinkageSize) / PtrByteSize;
+    GPR_idx = std::min(GPR_idx, NumGPRs);
 
     // PtrOff will be used to store the current argument to the stack if a
     // register cannot be found for it.
@@ -4145,15 +4097,6 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
       if (Size == 0)
         continue;
 
-      unsigned BVAlign = Flags.getByValAlign();
-      if (BVAlign > 8) {
-        if (BVAlign % PtrByteSize != 0)
-          llvm_unreachable(
-            "ByVal alignment is not a multiple of the pointer size");
-
-        ArgOffset = ((ArgOffset+BVAlign-1)/BVAlign)*BVAlign;
-      }
-
       // All aggregates smaller than 8 bytes must be passed right-justified.
       if (Size==1 || Size==2 || Size==4) {
         EVT VT = (Size==1) ? MVT::i8 : ((Size==2) ? MVT::i16 : MVT::i32);
@@ -4162,7 +4105,7 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
                                         MachinePointerInfo(), VT,
                                         false, false, 0);
           MemOpChains.push_back(Load.getValue(1));
-          RegsToPass.push_back(std::make_pair(GPR[GPR_idx++], Load));
+          RegsToPass.push_back(std::make_pair(GPR[GPR_idx], Load));
 
           ArgOffset += PtrByteSize;
           continue;
@@ -4170,9 +4113,12 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
       }
 
       if (GPR_idx == NumGPRs && Size < 8) {
-        SDValue Const = DAG.getConstant(PtrByteSize - Size,
-                                        PtrOff.getValueType());
-        SDValue AddPtr = DAG.getNode(ISD::ADD, dl, PtrVT, PtrOff, Const);
+        SDValue AddPtr = PtrOff;
+        if (!isLittleEndian) {
+          SDValue Const = DAG.getConstant(PtrByteSize - Size,
+                                          PtrOff.getValueType());
+          AddPtr = DAG.getNode(ISD::ADD, dl, PtrVT, PtrOff, Const);
+        }
         Chain = CallSeqStart = createMemcpyOutsideCallSeq(Arg, AddPtr,
                                                           CallSeqStart,
                                                           Flags, DAG, dl);
@@ -4207,8 +4153,11 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
         // small aggregates, particularly for packed ones.
         // FIXME: It would be preferable to use the slot in the
         // parameter save area instead of a new local variable.
-        SDValue Const = DAG.getConstant(8 - Size, PtrOff.getValueType());
-        SDValue AddPtr = DAG.getNode(ISD::ADD, dl, PtrVT, PtrOff, Const);
+        SDValue AddPtr = PtrOff;
+        if (!isLittleEndian) {
+          SDValue Const = DAG.getConstant(8 - Size, PtrOff.getValueType());
+          AddPtr = DAG.getNode(ISD::ADD, dl, PtrVT, PtrOff, Const);
+        }
         Chain = CallSeqStart = createMemcpyOutsideCallSeq(Arg, AddPtr,
                                                           CallSeqStart,
                                                           Flags, DAG, dl);
@@ -4218,7 +4167,7 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
                                    MachinePointerInfo(),
                                    false, false, false, 0);
         MemOpChains.push_back(Load.getValue(1));
-        RegsToPass.push_back(std::make_pair(GPR[GPR_idx++], Load));
+        RegsToPass.push_back(std::make_pair(GPR[GPR_idx], Load));
 
         // Done with this argument.
         ArgOffset += PtrByteSize;
@@ -4251,7 +4200,7 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
     case MVT::i32:
     case MVT::i64:
       if (GPR_idx != NumGPRs) {
-        RegsToPass.push_back(std::make_pair(GPR[GPR_idx++], Arg));
+        RegsToPass.push_back(std::make_pair(GPR[GPR_idx], Arg));
       } else {
         LowerMemOpCallTo(DAG, MF, Chain, Arg, PtrOff, SPDiff, ArgOffset,
                          true, isTailCall, false, MemOpChains,
@@ -4269,7 +4218,8 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
           // must be passed right-justified in the stack doubleword, and
           // in the GPR, if one is available.
           SDValue StoreOff;
-          if (Arg.getSimpleValueType().SimpleTy == MVT::f32) {
+          if (Arg.getSimpleValueType().SimpleTy == MVT::f32 &&
+              !isLittleEndian) {
             SDValue ConstFour = DAG.getConstant(4, PtrOff.getValueType());
             StoreOff = DAG.getNode(ISD::ADD, dl, PtrVT, PtrOff, ConstFour);
           } else
@@ -4285,15 +4235,13 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
                                        MachinePointerInfo(), false, false,
                                        false, 0);
             MemOpChains.push_back(Load.getValue(1));
-            RegsToPass.push_back(std::make_pair(GPR[GPR_idx++], Load));
+            RegsToPass.push_back(std::make_pair(GPR[GPR_idx], Load));
           }
-        } else if (GPR_idx != NumGPRs)
-          // If we have any FPRs remaining, we may also have GPRs remaining.
-          ++GPR_idx;
+        }
       } else {
         // Single-precision floating-point values are mapped to the
         // second (rightmost) word of the stack doubleword.
-        if (Arg.getValueType() == MVT::f32) {
+        if (Arg.getValueType() == MVT::f32 && !isLittleEndian) {
           SDValue ConstFour = DAG.getConstant(4, PtrOff.getValueType());
           PtrOff = DAG.getNode(ISD::ADD, dl, PtrVT, PtrOff, ConstFour);
         }
@@ -4310,21 +4258,13 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
     case MVT::v16i8:
     case MVT::v2f64:
     case MVT::v2i64:
+      // For a varargs call, named arguments go into VRs or on the stack as
+      // usual; unnamed arguments always go to the stack or the corresponding
+      // GPRs when within range.  For now, we always put the value in both
+      // locations (or even all three).
       if (isVarArg) {
-        // These go aligned on the stack, or in the corresponding R registers
-        // when within range.  The Darwin PPC ABI doc claims they also go in
-        // V registers; in fact gcc does this only for arguments that are
-        // prototyped, not for those that match the ...  We do it for all
-        // arguments, seems to work.
-        while (ArgOffset % 16 !=0) {
-          ArgOffset += PtrByteSize;
-          if (GPR_idx != NumGPRs)
-            GPR_idx++;
-        }
         // We could elide this store in the case where the object fits
         // entirely in R registers.  Maybe later.
-        PtrOff = DAG.getNode(ISD::ADD, dl, PtrVT, StackPtr,
-                            DAG.getConstant(ArgOffset, PtrVT));
         SDValue Store = DAG.getStore(Chain, dl, Arg, PtrOff,
                                      MachinePointerInfo(), false, false, 0);
         MemOpChains.push_back(Store);
@@ -4355,10 +4295,8 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
         break;
       }
 
-      // Non-varargs Altivec params generally go in registers, but have
-      // stack space allocated at the end.
+      // Non-varargs Altivec params go into VRs or on the stack.
       if (VR_idx != NumVRs) {
-        // Doesn't have GPR space allocated.
         unsigned VReg = (Arg.getSimpleValueType() == MVT::v2f64 ||
                          Arg.getSimpleValueType() == MVT::v2i64) ?
                         VSRH[VR_idx] : VR[VR_idx];
@@ -4369,11 +4307,14 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
         LowerMemOpCallTo(DAG, MF, Chain, Arg, PtrOff, SPDiff, ArgOffset,
                          true, isTailCall, true, MemOpChains,
                          TailCallArguments, dl);
-        ArgOffset += 16;
       }
+      ArgOffset += 16;
       break;
     }
   }
+
+  assert(NumBytesActuallyUsed == ArgOffset);
+  (void)NumBytesActuallyUsed;
 
   if (!MemOpChains.empty())
     Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, MemOpChains);
@@ -4383,19 +4324,15 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
   // pointers in the 64-bit SVR4 ABI.
   if (!isTailCall &&
       !dyn_cast<GlobalAddressSDNode>(Callee) &&
-      !dyn_cast<ExternalSymbolSDNode>(Callee) &&
-      !isBLACompatibleAddress(Callee, DAG)) {
+      !dyn_cast<ExternalSymbolSDNode>(Callee)) {
     // Load r2 into a virtual register and store it to the TOC save area.
     SDValue Val = DAG.getCopyFromReg(Chain, dl, PPC::X2, MVT::i64);
     // TOC save area offset.
-    SDValue PtrOff = DAG.getIntPtrConstant(40);
+    unsigned TOCSaveOffset = PPCFrameLowering::getTOCSaveOffset();
+    SDValue PtrOff = DAG.getIntPtrConstant(TOCSaveOffset);
     SDValue AddPtr = DAG.getNode(ISD::ADD, dl, PtrVT, StackPtr, PtrOff);
     Chain = DAG.getStore(Val.getValue(1), dl, Val, AddPtr, MachinePointerInfo(),
                          false, false, 0);
-    // R12 must contain the address of an indirect callee.  This does not
-    // mean the MTCTR instruction must use R12; it's easier to model this
-    // as an extra parameter, so do that.
-    RegsToPass.push_back(std::make_pair((unsigned)PPC::X12, Callee));
   }
 
   // Build a sequence of copy-to-reg nodes chained together with token chain
@@ -4443,15 +4380,55 @@ PPCTargetLowering::LowerCall_Darwin(SDValue Chain, SDValue Callee,
       CallConv == CallingConv::Fast)
     MF.getInfo<PPCFunctionInfo>()->setHasFastCall();
 
-  unsigned nAltivecParamsAtEnd = 0;
-
   // Count how many bytes are to be pushed on the stack, including the linkage
   // area, and parameter passing area.  We start with 24/48 bytes, which is
   // prereserved space for [SP][CR][LR][3 x unused].
-  unsigned NumBytes =
-    CalculateParameterAndLinkageAreaSize(DAG, isPPC64, isVarArg, CallConv,
-                                         Outs, OutVals,
-                                         nAltivecParamsAtEnd);
+  unsigned LinkageSize = PPCFrameLowering::getLinkageSize(isPPC64, true);
+  unsigned NumBytes = LinkageSize;
+
+  // Add up all the space actually used.
+  // In 32-bit non-varargs calls, Altivec parameters all go at the end; usually
+  // they all go in registers, but we must reserve stack space for them for
+  // possible use by the caller.  In varargs or 64-bit calls, parameters are
+  // assigned stack space in order, with padding so Altivec parameters are
+  // 16-byte aligned.
+  unsigned nAltivecParamsAtEnd = 0;
+  for (unsigned i = 0; i != NumOps; ++i) {
+    ISD::ArgFlagsTy Flags = Outs[i].Flags;
+    EVT ArgVT = Outs[i].VT;
+    // Varargs Altivec parameters are padded to a 16 byte boundary.
+    if (ArgVT == MVT::v4f32 || ArgVT == MVT::v4i32 ||
+        ArgVT == MVT::v8i16 || ArgVT == MVT::v16i8 ||
+        ArgVT == MVT::v2f64 || ArgVT == MVT::v2i64) {
+      if (!isVarArg && !isPPC64) {
+        // Non-varargs Altivec parameters go after all the non-Altivec
+        // parameters; handle those later so we know how much padding we need.
+        nAltivecParamsAtEnd++;
+        continue;
+      }
+      // Varargs and 64-bit Altivec parameters are padded to 16 byte boundary.
+      NumBytes = ((NumBytes+15)/16)*16;
+    }
+    NumBytes += CalculateStackSlotSize(ArgVT, Flags, PtrByteSize);
+  }
+
+  // Allow for Altivec parameters at the end, if needed.
+  if (nAltivecParamsAtEnd) {
+    NumBytes = ((NumBytes+15)/16)*16;
+    NumBytes += 16*nAltivecParamsAtEnd;
+  }
+
+  // The prolog code of the callee may store up to 8 GPR argument registers to
+  // the stack, allowing va_start to index over them in memory if its varargs.
+  // Because we cannot tell if this is needed on the caller side, we have to
+  // conservatively assume that it is needed.  As such, make sure we have at
+  // least enough stack space for the caller to store the 8 GPRs.
+  NumBytes = std::max(NumBytes, LinkageSize + 8 * PtrByteSize);
+
+  // Tail call needs the stack to be aligned.
+  if (getTargetMachine().Options.GuaranteedTailCallOpt &&
+      CallConv == CallingConv::Fast)
+    NumBytes = EnsureStackAlignment(MF.getTarget(), NumBytes);
 
   // Calculate by how many bytes the stack has to be adjusted in case of tail
   // call optimization.
@@ -4487,7 +4464,7 @@ PPCTargetLowering::LowerCall_Darwin(SDValue Chain, SDValue Callee,
   // memory.  Also, if this is a vararg function, floating point operations
   // must be stored to our stack, and loaded into integer regs as well, if
   // any integer regs are available for argument passing.
-  unsigned ArgOffset = PPCFrameLowering::getLinkageSize(isPPC64, true);
+  unsigned ArgOffset = LinkageSize;
   unsigned GPR_idx = 0, FPR_idx = 0, VR_idx = 0;
 
   static const MCPhysReg GPR_32[] = {           // 32-bit registers.
@@ -6856,13 +6833,13 @@ PPCTargetLowering::EmitInstrWithCustomInserter(MachineInstr *MI,
     BB = EmitAtomicBinary(MI, BB, true, PPC::XOR8);
 
   else if (MI->getOpcode() == PPC::ATOMIC_LOAD_NAND_I8)
-    BB = EmitPartwordAtomicBinary(MI, BB, true, PPC::ANDC);
+    BB = EmitPartwordAtomicBinary(MI, BB, true, PPC::NAND);
   else if (MI->getOpcode() == PPC::ATOMIC_LOAD_NAND_I16)
-    BB = EmitPartwordAtomicBinary(MI, BB, false, PPC::ANDC);
+    BB = EmitPartwordAtomicBinary(MI, BB, false, PPC::NAND);
   else if (MI->getOpcode() == PPC::ATOMIC_LOAD_NAND_I32)
-    BB = EmitAtomicBinary(MI, BB, false, PPC::ANDC);
+    BB = EmitAtomicBinary(MI, BB, false, PPC::NAND);
   else if (MI->getOpcode() == PPC::ATOMIC_LOAD_NAND_I64)
-    BB = EmitAtomicBinary(MI, BB, true, PPC::ANDC8);
+    BB = EmitAtomicBinary(MI, BB, true, PPC::NAND8);
 
   else if (MI->getOpcode() == PPC::ATOMIC_LOAD_SUB_I8)
     BB = EmitPartwordAtomicBinary(MI, BB, true, PPC::SUBF);
@@ -7357,10 +7334,9 @@ static bool findConsecutiveLoad(LoadSDNode *LD, SelectionDAG &DAG) {
       if (!Visited.count(ChainLD->getChain().getNode()))
         Queue.push_back(ChainLD->getChain().getNode());
     } else if (ChainNext->getOpcode() == ISD::TokenFactor) {
-      for (SDNode::op_iterator O = ChainNext->op_begin(),
-           OE = ChainNext->op_end(); O != OE; ++O)
-        if (!Visited.count(O->getNode()))
-          Queue.push_back(O->getNode());
+      for (const SDUse &O : ChainNext->ops())
+        if (!Visited.count(O.getNode()))
+          Queue.push_back(O.getNode());
     } else
       LoadRoots.insert(ChainNext);
   }
@@ -8256,12 +8232,11 @@ SDValue PPCTargetLowering::PerformDAGCombine(SDNode *N,
         ++UI;
 
         SmallVector<SDValue, 8> Ops;
-        for (SDNode::op_iterator O = User->op_begin(),
-             OE = User->op_end(); O != OE; ++O) {
-          if (*O == Use)
+        for (const SDUse &O : User->ops()) {
+          if (O == Use)
             Ops.push_back(To);
           else
-            Ops.push_back(*O);
+            Ops.push_back(O);
         }
 
         DAG.UpdateNodeOperands(User, Ops);
