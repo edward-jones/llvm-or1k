@@ -15,6 +15,7 @@
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
+#include "llvm/MC/MCParser/MCAsmParser.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -32,7 +33,7 @@ class OR1KAsmParser : public MCTargetAsmParser {
 public:
   OR1KAsmParser(MCSubtargetInfo &STI, MCAsmParser &P, const MCInstrInfo &MII,
                 const MCTargetOptions &Options)
-      : STI(STI) {
+      : STI(STI), Parser(P) {
     setAvailableFeatures(ComputeAvailableFeatures(STI.getFeatureBits()));
   }
 
@@ -58,11 +59,14 @@ private:
   OperandMatchResultTy parseRegister(OperandVector &Operands, StringRef Name);
   OperandMatchResultTy parseImmediate(OperandVector &Operands, StringRef Name);
 
+  bool parseDirectiveWord(unsigned Size, SMLoc L);
+
   bool matchImmediate(const MCExpr *&Expr, SMLoc &EndLoc);
   bool matchJumpTarget(const MCExpr *&Expr, SMLoc &EndLoc);
 
 private:
   MCSubtargetInfo &STI;
+  MCAsmParser &Parser;
 };
 
 /// \brief Instances of this class represented a parsed machine instruction
@@ -546,12 +550,46 @@ bool OR1KAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 }
 
 bool OR1KAsmParser::ParseDirective(AsmToken DirectiveID) {
-  if (DirectiveID.is(AsmToken::Identifier) &&
-      DirectiveID.getIdentifier() == ".nodelay") {
+  StringRef IDVal = DirectiveID.getString();
+  SMLoc Loc = DirectiveID.getLoc();
+
+  if (IDVal == ".nodelay") {
+    // As for now, just ignore this directive.
+    Parser.Lex();
+    return false;
+  }
+
+  if (IDVal == ".word") {
+    parseDirectiveWord(4, Loc);
     return false;
   }
 
   return true;
+}
+
+/// parseDirectiveWord
+///  ::= .word [ expression (, expression)* ]
+bool OR1KAsmParser::parseDirectiveWord(unsigned Size, SMLoc L) {
+  if (getLexer().isNot(AsmToken::EndOfStatement)) {
+    for (;;) {
+      const MCExpr *Value;
+      if (getParser().parseExpression(Value))
+        return true;
+
+      getParser().getStreamer().EmitValue(Value, Size);
+
+      if (getLexer().is(AsmToken::EndOfStatement))
+        break;
+
+      // FIXME: Improve diagnostic.
+      if (getLexer().isNot(AsmToken::Comma))
+        return Error(L, "unexpected token in directive");
+      Parser.Lex();
+    }
+  }
+
+  Parser.Lex();
+  return false;
 }
 
 extern "C" void LLVMInitializeOR1KAsmParser() {
